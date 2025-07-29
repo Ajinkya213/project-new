@@ -1,0 +1,56 @@
+#Colpali
+colpali-engine
+colpali-engine[interpretability]
+
+#Deep learning libraries
+torch
+
+#MCP
+uv
+uvicorn[standard]
+
+#websearch tool
+tavily-python
+
+#Agents Framework
+crewai
+crewai-tools
+
+#Database
+qdrant-client
+pydantic
+
+#Pdf and Image processing
+pymupdf
+PyPDF2
+pdf2image
+poppler-utils
+Pillow
+
+#Generative AI library
+google-genai
+
+#Other dependencies
+IPython
+dotenv
+numpy
+pandas
+matplotlib
+seaborn
+python-multipart
+
+
+#####
+fastapi
+pydantic
+crewai
+tavily
+
+Flask 
+Flask-SQLAlchemy 
+pymysql 
+passlib 
+bcrypt 
+python-dotenv
+cryptography
+Flask-JWT-Extended

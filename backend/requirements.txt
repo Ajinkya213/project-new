@@ -1,8 +1,0 @@
-Flask 
-Flask-SQLAlchemy 
-pymysql 
-passlib 
-bcrypt 
-python-dotenv
-cryptography
-Flask-JWT-Extended
