@@ -15,9 +15,19 @@ def search_web(query: str) -> str:
     except Exception as e:
         return f"Search failed: {e}"
 
-@tool
+@tool("Document Retrival tool")
 def retrive_from_document(query:str)->str:
-    dataset
-    result=rag.generate_result(query,dataset)
-    return result
+    """
+    Retrieve relevant content from the document database based on the user's query.
+    """
+    try:
+        result=rag.generate_result(query)
+        if result['status']=="success":
+            return result
+        elif result['status']=="no_results":
+            return result['message']
+        else:
+            return f"Error: {result['message']}"
+    except Exception as e:
+        return f"Retrival failed: {e}"
     

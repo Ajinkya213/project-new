@@ -6,7 +6,7 @@ class PdfConverter:
     '''
     Converts PDF file or PDF files from folder to images.
     '''
-    def __init__(self,image_dir='/images_dir'):
+    def __init__(self,image_dir=r'..\data\pdf_images'):
         self.saved_images_dir=image_dir
         os.makedirs(self.saved_images_dir,exist_ok=True)
         os.environ["TOKENIZERS_PARALLELISM"]="false"
@@ -32,10 +32,15 @@ class PdfConverter:
         
         results=[]
         for page_num,image in enumerate(images):
+            image_filename = f"doc_{self._doc_counter}_page_{page_num+1}_{pdf_name.replace('.pdf', '')}.png"
+            image_path = os.path.join(self.saved_images_dir, image_filename)
+            image.convert('RGB').save(image_path)
+            
             results.append({
                 "doc_id":self._doc_counter,
                 "filename":pdf_name,
                 "page_number":page_num+1,
+                "image_path":image_path,
                 "image":image.convert('RGB')
             })
         self._doc_counter+=1

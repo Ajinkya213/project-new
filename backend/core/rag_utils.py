@@ -4,17 +4,16 @@ from .colpali_client import ColpaliClient
 from .qdrant_utils import VectorDBClient
 import google.generativeai as genai
 import os
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-#to remove
-from .utils import PdfConverter
 
 class MultiModalRAG:
-    def __init__(self,url:str,api_key:str):
+    def __init__(self,url:str,api_key:str,image_dir:str=r'..\data\pdf_images'):
         self.colpali=ColpaliClient()
         self.qdrant=VectorDBClient(url,api_key)
         self.collection='test'
+        self.image_dir=image_dir
         self._init_collection()
         
+        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=GEMINI_API_KEY)
         self.model=genai.GenerativeModel('gemini-2.5-flash')
         print("[INFO] MultiModalRAG initialized successfully")
@@ -47,10 +46,9 @@ class MultiModalRAG:
         
         return results
     
-    def get_result_images(self,search_result:List,dataset:List[Dict])->List[Tuple[Image.Image,Dict]]:        
+    def get_result_images(self,search_result:List,dataset:List[Dict]=None)->List[Tuple[Image.Image,Dict]]:        
         retrieved_images=[]
         for result in search_result:
-            # Handle ScoredPoint objects from Qdrant
             if hasattr(result, 'payload'):
                 payload = result.payload
                 score = result.score
@@ -62,18 +60,14 @@ class MultiModalRAG:
             page_num=payload.get("page_num")
             filename=payload.get("source")
             
-            matched=next(
-                (item for item in dataset
-                if item['doc_id']==doc_id and
-                   item['page_number']==page_num and
-                   item['filename']==filename
-                ),
-                None
-            )
+            # Construct image path from metadata
+            pdf_name_without_ext = filename.replace('.pdf', '')
+            image_filename = f"doc_{doc_id}_page_{page_num}_{pdf_name_without_ext}.png"
+            image_path = os.path.join(self.image_dir, image_filename)  # Use your actual image directory
             
-            if matched:
-                # The image is already a PIL Image object in memory
-                image = matched['image']
+            try:
+                # Load image from disk
+                image = Image.open(image_path)
                 metadata = {
                     'doc_id': doc_id,
                     'page_number': page_num,
@@ -82,12 +76,14 @@ class MultiModalRAG:
                 }
                 retrieved_images.append((image, metadata))
                 print(f"[INFO] Retrieved image: {filename}, page {page_num}, score: {score:.3f}")
-            else:
-                print(f"[WARNING] No matching image found for doc_id={doc_id}, page={page_num}, file={filename}")
+            except FileNotFoundError:
+                print(f"[WARNING] Image file not found: {image_path}")
+            except Exception as e:
+                print(f"[ERROR] Failed to load image {image_path}: {e}")
         
         return retrieved_images
     
-    def search_and_retrieve(self, query_text: str, dataset: List[Dict], top_k: int = 5) -> List[Tuple[Image.Image, Dict]]:
+    def search_and_retrieve(self, query_text: str, top_k: int = 5) -> List[Tuple[Image.Image, Dict]]:
         """
         Complete workflow: search for relevant pages and retrieve their images
         """
@@ -99,7 +95,7 @@ class MultiModalRAG:
             search_results = search_results[:top_k]
         
         # Retrieve corresponding images
-        retrieved_images = self.get_result_images(search_results, dataset)
+        retrieved_images = self.get_result_images(search_results)
         
         print(f"[INFO] Retrieved {len(retrieved_images)} images for query: '{query_text}'")
         return retrieved_images
@@ -131,14 +127,14 @@ class MultiModalRAG:
         else:
             return {"sufficient": False, "confidence": "low", "reason": "Low relevance scores"}
         
-    def generate_result(self, query_text: str, dataset: List[Dict]) -> Dict:
+    def generate_result(self, query_text: str) -> Dict:
         """
         Complete RAG workflow: search, retrieve images, and get response from Gemini
         Returns structured result with metadata
         """
         try:
             # Search and retrieve images
-            retrieved_images = self.search_and_retrieve(query_text, dataset)
+            retrieved_images = self.search_and_retrieve(query_text)
             
             # Evaluate retrieval quality
             evaluation = self.evaluate_retrieval_quality(retrieved_images, query_text)

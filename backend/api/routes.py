@@ -1,13 +1,16 @@
-from fastapi import APIRouter, UploadFile, File
-from typing import List
-from backend.services.query_service import process_query, process_documents
+from flask import Blueprint, request, jsonify
+from werkzeug.datastructures import FileStorage
+from services.query_service import process_query, process_documents
 
-router = APIRouter()
+bp = Blueprint('api', __name__)
 
-@router.post("/upload/")
-async def upload(files: List[UploadFile] = File(...)):
+@bp.route("/upload/", methods=['POST'])
+async def upload():
+    files = request.files.getlist('files')
     return await process_documents(files)
 
-@router.post("/query/")
-async def query(query: str):
-    return await process_query(query)
+@bp.route("/query/", methods=['POST'])
+async def query():
+    data = request.get_json()
+    query_text = data.get('query', '')
+    return await process_query(query_text)
