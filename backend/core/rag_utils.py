@@ -5,8 +5,9 @@ from .qdrant_utils import VectorDBClient
 import google.generativeai as genai
 import os
 
+
 class MultiModalRAG:
-    def __init__(self,url:str,api_key:str,image_dir:str=r'..\data\pdf_images'):
+    def __init__(self,url:str,api_key:str,image_dir:str=r"..\data\pdf_images"):
         self.colpali=ColpaliClient()
         self.qdrant=VectorDBClient(url,api_key)
         self.collection='test'
@@ -16,9 +17,13 @@ class MultiModalRAG:
         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=GEMINI_API_KEY)
         self.model=genai.GenerativeModel('gemini-2.5-flash')
+        
         print("[INFO] MultiModalRAG initialized successfully")
         
     def _init_collection(self):
+        '''
+        Create collection if not present
+        '''
         collections=self.qdrant._get_collections().collections
         if not any(col.name == self.collection for col in collections):
             print(f"[INFO] Creating collections...")
@@ -27,6 +32,9 @@ class MultiModalRAG:
             print(f"[INFO] Collection already exists")
             
     def index_document(self,dataset:List[Dict]):
+        '''
+        Create embeddings of image and insert to the vectorDB
+        '''
         print("[INFO] Preparing point structures for Qdrant...")
         points=self.qdrant.create_points(self.colpali,dataset)
         
@@ -34,6 +42,9 @@ class MultiModalRAG:
         self.qdrant.insert_data(points,dataset)
         
     def query(self,query_text:str)->List[Dict]:
+        '''
+        Creates query embeddings and search relevent images based on user query
+        '''
         print(f"[INFO] Generating embedding for query: '{query_text}'")
         query_embeddings=self.colpali.get_query_embeddings(query_text)
         
@@ -47,6 +58,9 @@ class MultiModalRAG:
         return results
     
     def get_result_images(self,search_result:List,dataset:List[Dict]=None)->List[Tuple[Image.Image,Dict]]:        
+        '''
+        Extract information from the retrived point
+        '''
         retrieved_images=[]
         for result in search_result:
             if hasattr(result, 'payload'):
@@ -85,7 +99,7 @@ class MultiModalRAG:
     
     def search_and_retrieve(self, query_text: str, top_k: int = 5) -> List[Tuple[Image.Image, Dict]]:
         """
-        Complete workflow: search for relevant pages and retrieve their images
+        Search for relevant pages and retrieve their images
         """
         # Get search results
         search_results = self.query(query_text)

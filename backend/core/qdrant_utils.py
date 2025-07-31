@@ -11,12 +11,21 @@ class VectorDBClient:
         )
         
     def _get_client_info(self):
+        '''
+        Get info of the client
+        '''
         return self.client.info()
     
     def _get_collections(self):
+        '''
+        List all the collections in the cluster
+        '''
         return self.client.get_collections()
     
     def create_collection(self,name:str='test',vector_size:int=128)->None:
+        '''
+        Creates a collection with the given name and vextor size
+        '''
         self.client.create_collection(
             collection_name=name,
             on_disk_payload=True,
@@ -31,6 +40,9 @@ class VectorDBClient:
         )
     
     def create_points(self,colpali_client: ColpaliClient,dataset:List[Dict],batch_size:int=5)->List:
+        '''
+        Creates points containing all the metadata for image and its vectors to insert to qdrant DB
+        '''
         points=[]
         for i in range(0,len(dataset),batch_size):
             batch=dataset[i:i+batch_size]
@@ -53,6 +65,9 @@ class VectorDBClient:
             return points
     
     def insert_data(self,points:List,dataset:List[Dict],batch_size:int=5,collection_name:str='test')->None:
+        '''
+        Upsert points data to the collection 
+        '''
         for i in range(0,len(dataset),batch_size):
             batch_points=points[i:i+batch_size]
             try:
@@ -67,6 +82,9 @@ class VectorDBClient:
         print(f"[INFO] Data inserted successfully")
         
     def search(self,user_query:List,collection_name:str='test')->List:
+        '''
+        Search and retrive the points which match the user query 
+        '''
         result=self.client.query_points(
             collection_name=collection_name,
             query=user_query,

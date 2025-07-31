@@ -22,6 +22,9 @@ class ColpaliClient:
         )
     
     def get_image_embeddings(self,images:List)->List[List[float]]:
+        '''
+        Creates embeddings for the given image or list of images using Colpali
+        '''
         with torch.no_grad():
             image_inputs=self.processor.process_images(images).to(self.model.device)
             image_embeddings=self.model(**image_inputs)
@@ -29,6 +32,9 @@ class ColpaliClient:
         return embeddings
         
     def get_query_embeddings(self,query:str)->List:
+        '''
+        Creates embeddings for the given text query or list of queries using Colpali
+        '''
         with torch.no_grad():
             text_embeddings=self.processor.process_queries([query]).to(self.model.device)
             text_embeddings=self.model(**text_embeddings)
