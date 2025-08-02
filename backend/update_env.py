@@ -97,7 +97,7 @@ def main():
         print("\n💡 Example .env file should look like:")
         print("GOOGLE_API_KEY=AIzaSyC...")
         print("TAVILY_API_KEY=tvly-...")
-        print("JWT_SECRET_KEY=30d850b701fd6f699b2f7edfdaac5a27e9a0d68eceec31bee2f366050fa0ddf8")
+        # print("JWT_SECRET_KEY=30d850b701fd6f699b2f7edfdaac5a27e9a0d68eceec31bee2f366050fa0ddf8")
         print("DATABASE_URL=sqlite:///chat_app.db")
 
 if __name__ == "__main__":
