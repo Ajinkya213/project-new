@@ -49,49 +49,115 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         checkAuthStatus();
     }, []);
 
-    // Handle automatic logout when application is closed
+    // Periodic token refresh to prevent expiration during active use
     useEffect(() => {
-        const handleBeforeUnload = () => {
-            // Clear authentication data when user closes the application
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            setUser(null);
-            setIsAuthenticated(false);
-            setError(null);
+        if (!isAuthenticated) return;
 
-            // Dispatch logout event for other contexts
-            window.dispatchEvent(new CustomEvent('userLogout'));
-        };
+        const refreshInterval = setInterval(async () => {
+            try {
+                const refreshToken = localStorage.getItem('refresh_token');
+                if (!refreshToken) return;
 
-        const handleVisibilityChange = () => {
-            // Also logout when user switches tabs or minimizes browser
-            if (document.visibilityState === 'hidden') {
-                handleBeforeUnload();
+                const response = await fetch(`${API_BASE}/auth/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${refreshToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('access_token', data.access_token);
+                    console.log('Token refreshed successfully');
+                }
+            } catch (error) {
+                console.error('Periodic token refresh failed:', error);
             }
-        };
+        }, 14 * 60 * 1000); // Refresh every 14 minutes (assuming 15-minute token expiry)
 
-        // Add event listeners
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        // Cleanup event listeners
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, []);
+        return () => clearInterval(refreshInterval);
+    }, [isAuthenticated]);
 
     const checkAuthStatus = async () => {
         try {
-            // Always clear authentication on app start to redirect to landing page
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            setIsAuthenticated(false);
-            setUser(null);
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                setIsAuthenticated(false);
+                setUser(null);
+                setIsLoading(false);
+                return;
+            }
 
-            // Dispatch logout event to clear other contexts
-            window.dispatchEvent(new CustomEvent('userLogout'));
+            // Verify token with backend
+            const response = await fetch(`${API_BASE}/auth/verify`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
 
+            if (response.ok) {
+                const userData = await response.json();
+                setUser(userData.user);
+                setIsAuthenticated(true);
+            } else if (response.status === 401) {
+                // Token expired, try to refresh
+                const refreshToken = localStorage.getItem('refresh_token');
+                if (refreshToken) {
+                    try {
+                        const refreshResponse = await fetch(`${API_BASE}/auth/refresh`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${refreshToken}`
+                            }
+                        });
+
+                        if (refreshResponse.ok) {
+                            const refreshData = await refreshResponse.json();
+                            localStorage.setItem('access_token', refreshData.access_token);
+
+                            // Verify the new token
+                            const verifyResponse = await fetch(`${API_BASE}/auth/verify`, {
+                                method: 'GET',
+                                headers: {
+                                    'Authorization': `Bearer ${refreshData.access_token}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+
+                            if (verifyResponse.ok) {
+                                const userData = await verifyResponse.json();
+                                setUser(userData.user);
+                                setIsAuthenticated(true);
+                            } else {
+                                throw new Error('Token verification failed after refresh');
+                            }
+                        } else {
+                            throw new Error('Token refresh failed');
+                        }
+                    } catch (refreshError) {
+                        console.error('Token refresh failed:', refreshError);
+                        localStorage.removeItem('access_token');
+                        localStorage.removeItem('refresh_token');
+                        setIsAuthenticated(false);
+                        setUser(null);
+                    }
+                } else {
+                    // No refresh token available
+                    localStorage.removeItem('access_token');
+                    setIsAuthenticated(false);
+                    setUser(null);
+                }
+            } else {
+                // Other error, clear tokens
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                setIsAuthenticated(false);
+                setUser(null);
+            }
         } catch (error) {
             console.error('Auth check failed:', error);
             setIsAuthenticated(false);

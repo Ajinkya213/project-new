@@ -7,6 +7,10 @@ export interface ChatMessage {
     sender: string; // 'user' or 'ai'
     timestamp: string;
     session_id: string;
+    agent_info?: {
+        selectedAgent?: string;
+        confidence?: number;
+    };
 }
 
 export interface ChatSession {
@@ -27,7 +31,7 @@ interface ChatContextType {
     updateSession: (sessionId: string, updates: Partial<ChatSession>) => Promise<void>;
     deleteSession: (sessionId: string) => Promise<void>;
     setCurrentSession: (sessionId: string) => void;
-    addMessage: (sessionId: string, content: string, isUserMessage: boolean) => Promise<void>;
+    addMessage: (sessionId: string, content: string, isUserMessage: boolean, agentInfo?: any) => Promise<void>;
     updateMessage: (sessionId: string, messageId: string, content: string) => Promise<void>;
     deleteMessage: (sessionId: string, messageId: string) => Promise<void>;
     clearSession: (sessionId: string) => Promise<void>;
@@ -91,13 +95,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         // Listen for logout events
         window.addEventListener('userLogout', handleLogout);
 
-        // Also check periodically for token changes
-        const interval = setInterval(handleStorageChange, 1000);
-
         return () => {
             window.removeEventListener('storage', handleStorageChange);
             window.removeEventListener('userLogout', handleLogout);
-            clearInterval(interval);
         };
     }, []);
 
@@ -107,39 +107,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         if (token) {
             loadSessions();
         }
-    }, []);
-
-    // Also reload sessions when authentication status changes (e.g., after login)
-    useEffect(() => {
-        let lastToken = getAuthToken();
-
-        const handleAuthChange = () => {
-            const currentToken = getAuthToken();
-
-            // Only reload if token changed from null to present (login) or present to null (logout)
-            if (lastToken !== currentToken) {
-                console.log('DEBUG: Auth token changed, last:', !!lastToken, 'current:', !!currentToken);
-
-                if (currentToken && !lastToken) {
-                    // User just logged in
-                    console.log('DEBUG: User logged in, loading sessions');
-                    loadSessions();
-                } else if (!currentToken && lastToken) {
-                    // User just logged out
-                    console.log('DEBUG: User logged out, clearing sessions');
-                    setSessions([]);
-                    setCurrentSessionState(null);
-                    setError(null);
-                }
-
-                lastToken = currentToken;
-            }
-        };
-
-        // Check for auth changes less frequently to avoid unnecessary reloads
-        const interval = setInterval(handleAuthChange, 5000);
-
-        return () => clearInterval(interval);
     }, []);
 
     // Listen for login events to reload sessions
@@ -419,12 +386,17 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         }
     };
 
-    const addMessage = async (sessionId: string, content: string, isUserMessage: boolean): Promise<void> => {
+    const addMessage = async (sessionId: string, content: string, isUserMessage: boolean, agentInfo?: any): Promise<void> => {
         try {
             const token = getAuthToken();
             if (!token) {
                 throw new Error('No authentication token');
             }
+
+            // Ensure content is a string
+            const contentString = typeof content === 'string' ? content : String(content);
+
+            console.log('[DEBUG] Adding message:', { sessionId, content: contentString.substring(0, 100), isUserMessage, agentInfo }); // Debug log
 
             const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
                 method: 'POST',
@@ -433,12 +405,28 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    text: content,
-                    sender: isUserMessage ? 'user' : 'ai'
+                    text: contentString,
+                    sender: isUserMessage ? 'user' : 'ai',
+                    agent_info: agentInfo
                 })
             });
 
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[DEBUG] Response error:', response.status, errorText); // Debug log
+
+                // Handle specific error cases
+                if (response.status === 400) {
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        if (errorData.error && errorData.error.includes('cannot exceed')) {
+                            throw new Error('Response too long. Please try a shorter query.');
+                        }
+                    } catch (parseError) {
+                        // If we can't parse the error, use the original error
+                    }
+                }
+
                 throw new Error(`Failed to add message: ${response.status}`);
             }
 

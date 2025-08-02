@@ -197,35 +197,61 @@ def send_message(session_id):
             return jsonify({'error': 'User not found'}), 404
         
         session = ChatSession.query.get(session_id)
+        print(f"[DEBUG] Session ID: {session_id}, User ID: {user.id}")
+        print(f"[DEBUG] Session found: {session is not None}")
+        if session:
+            print(f"[DEBUG] Session user ID: {session.user_id}")
+        
         if not session:
             return jsonify({'error': 'Session not found'}), 404
         
         # Check ownership
         if session.user_id != user.id:
+            print(f"[DEBUG] Access denied: session user {session.user_id} != current user {user.id}")
             return jsonify({'error': 'Access denied'}), 403
         
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Request body is required'}), 400
         
+        # Debug logging
+        print(f"[DEBUG] Received message data: {data}")
+        print(f"[DEBUG] Text: {data.get('text', 'NOT_FOUND')}")
+        print(f"[DEBUG] Sender: {data.get('sender', 'NOT_FOUND')}")
+        
         # Validate required fields
         required_fields = ['text', 'sender']
         validation_errors = validate_user_input(data, required_fields)
         
         if validation_errors:
+            print(f"[DEBUG] Validation errors: {validation_errors}")
             return jsonify({'error': 'Validation failed', 'details': validation_errors}), 400
         
         text = sanitize_input(data['text'])
         sender = data['sender']
-        
-        # Validate message
-        is_valid, error_msg = MessageValidator.validate_message(text)
-        if not is_valid:
-            return jsonify({'error': error_msg}), 400
+        agent_info = data.get('agent_info')  # Optional agent information
         
         # Validate sender
         if sender not in ['user', 'ai']:
             return jsonify({'error': 'Sender must be "user" or "ai"'}), 400
+        
+        # For AI responses, be more lenient with validation
+        if sender == 'ai':
+            print(f"[DEBUG] Validating AI response: {text[:100]}...")  # Debug log
+            # Basic validation for AI responses
+            if not text or len(text.strip()) < 1:
+                print(f"[DEBUG] AI response validation failed: empty or too short")
+                return jsonify({'error': 'AI response cannot be empty'}), 400
+            if len(text) > MessageValidator.MAX_MESSAGE_LENGTH:
+                print(f"[DEBUG] AI response validation failed: too long ({len(text)} chars)")
+                return jsonify({'error': f'AI response cannot exceed {MessageValidator.MAX_MESSAGE_LENGTH} characters'}), 400
+            print(f"[DEBUG] AI response validation passed")
+        else:
+            # Full validation for user messages
+            is_valid, error_msg = MessageValidator.validate_message(text)
+            if not is_valid:
+                print(f"[DEBUG] User message validation failed: {error_msg}")
+                return jsonify({'error': error_msg}), 400
         
         # Create message
         message = Message(text=text, sender=sender, session_id=session_id)

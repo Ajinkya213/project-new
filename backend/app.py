@@ -4,7 +4,7 @@ from flask_cors import CORS
 import os
 
 # Import configuration
-from config import config
+from config.settings import config
 
 # Import database
 from models.database import init_app as init_database
@@ -12,6 +12,7 @@ from models.database import init_app as init_database
 # Import routes
 from routes.auth import auth_bp
 from routes.chat import chat_bp
+from routes.agent import agent_bp
 
 def create_app(config_name='development'):
     """Application factory pattern"""
@@ -34,6 +35,7 @@ def create_app(config_name='development'):
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(agent_bp)
     
     # Error handlers
     @app.errorhandler(404)
@@ -65,6 +67,7 @@ def create_app(config_name='development'):
             'endpoints': {
                 'auth': '/auth',
                 'chat': '/chat',
+                'agent': '/agent',
                 'health': '/health'
             }
         }), 200

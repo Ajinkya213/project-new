@@ -4,7 +4,7 @@ from typing import List, Tuple, Optional
 class MessageValidator:
     """Validator for chat messages"""
     
-    MAX_MESSAGE_LENGTH = 5000
+    MAX_MESSAGE_LENGTH = 10000  # Increased for AI responses
     MIN_MESSAGE_LENGTH = 1
     
     @staticmethod
@@ -19,7 +19,8 @@ class MessageValidator:
         if len(text) > MessageValidator.MAX_MESSAGE_LENGTH:
             return False, f"Message cannot exceed {MessageValidator.MAX_MESSAGE_LENGTH} characters"
         
-        # Check for potentially harmful content
+        # Check for potentially harmful content (only for user messages, not AI responses)
+        # AI responses might contain legitimate HTML-like content for formatting
         if MessageValidator._contains_suspicious_content(text):
             return False, "Message contains inappropriate content"
         

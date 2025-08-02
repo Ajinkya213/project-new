@@ -7,3 +7,32 @@ PyMySQL==1.1.0
 cryptography==41.0.7
 python-dotenv==1.0.0
 Werkzeug==2.3.7
+
+# AI/ML Libraries
+google-generativeai
+crewai
+crewai-tools
+
+# Vector Database
+qdrant-client
+
+# PDF and Image Processing
+pdf2image
+pymupdf
+PyPDF2
+Pillow
+
+# Web search tool
+tavily-python
+
+# Data processing
+pydantic
+numpy
+pandas
+
+# Security
+passlib
+bcrypt
+
+# Other dependencies
+python-multipart

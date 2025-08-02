@@ -4,7 +4,6 @@ import { UploadIcon, FileIcon, TrashIcon, ViewHorizontalIcon, ViewGridIcon } fro
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -137,25 +136,23 @@ export function FileLibraryTab({ uploadedFiles, onFileUpload, onFileDelete }: Fi
         </ToggleGroup>
       </div>
 
-      {/* Changed class from flex-1 pr-4 to grow pr-4 to ensure scrolling */}
-      <div className="grow pr-4 overflow-hidden">
-        <ScrollArea className="h-full">
-          {uploadedFiles.length === 0 ? (
-            <p className="text-muted-foreground text-center py-10">No files uploaded yet.</p>
-          ) : viewMode === "list" ? (
-            <div className="grid gap-3">
-              {uploadedFiles.map((file) => (
-                <FileListItem key={file.id} file={file} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {uploadedFiles.map((file) => (
-                <FileCard key={file.id} file={file} />
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+      {/* Removed ScrollArea and replaced with simple div */}
+      <div className="flex-1 overflow-y-auto pr-4">
+        {uploadedFiles.length === 0 ? (
+          <p className="text-muted-foreground text-center py-10">No files uploaded yet.</p>
+        ) : viewMode === "list" ? (
+          <div className="grid gap-3">
+            {uploadedFiles.map((file) => (
+              <FileListItem key={file.id} file={file} />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {uploadedFiles.map((file) => (
+              <FileCard key={file.id} file={file} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

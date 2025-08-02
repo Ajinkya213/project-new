@@ -4,9 +4,10 @@ import { ChatTab } from "./ChatTab";
 import { FileLibraryTab } from "./FileLibraryTab";
 import { useChat } from "../../contexts/ChatContext";
 import type { ChatMessage } from "../../contexts/ChatContext";
+import { truncateResponse, getResponseInfo } from "../../utils/responseTruncator";
 
 interface MainContentProps {
-  // Removed currentSession prop since we get it from context
+  currentSession?: any;
 }
 
 interface UploadedFile {
@@ -19,7 +20,9 @@ interface UploadedFile {
   progress?: number; // 0-100
 }
 
-export function MainContent({ }: MainContentProps) {
+export function MainContent({
+  currentSession
+}: MainContentProps) {
   const { addMessage, addSession, currentSession: session } = useChat();
 
   // Use the session from context
@@ -29,28 +32,57 @@ export function MainContent({ }: MainContentProps) {
   const [isSendingMessage, setIsSendingMessage] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"chat" | "files">("chat");
 
-  // Enhanced AI response simulation with different response types
-  const generateAIResponse = (userMessage: string): string => {
-    const responses = [
-      `I understand you said: "${userMessage}". This is a helpful AI response that demonstrates the chat functionality.`,
-      `Thanks for your message: "${userMessage}". I'm here to help with any questions you might have.`,
-      `Interesting point about "${userMessage}". Let me provide some insights on this topic.`,
-      `I've processed your message: "${userMessage}". Here's what I think about this.`,
-      `Great question! Regarding "${userMessage}", here's my analysis.`
-    ];
+  // Enhanced AI response using automatic agent selection
+  const generateAIResponse = async (userMessage: string): Promise<{ response: string; agentInfo?: any }> => {
+    try {
+      const { AgentService } = await import('../../lib/agentService');
 
-    // Add some variety based on message content
-    if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
-      return "Hello! How can I assist you today?";
-    }
-    if (userMessage.toLowerCase().includes('help')) {
-      return "I'm here to help! What specific assistance do you need?";
-    }
-    if (userMessage.toLowerCase().includes('thank')) {
-      return "You're welcome! Is there anything else I can help you with?";
-    }
+      // Use automatic agent selection
+      const response = await AgentService.autoQueryAgent({
+        query: userMessage
+      });
 
-    return responses[Math.floor(Math.random() * responses.length)];
+      if (response.success) {
+        // Log the selected agent for debugging
+        if (response.agent_selection) {
+          console.log('Auto-selected agent:', response.agent_selection.selected_agent);
+          console.log('Confidence:', response.agent_selection.confidence);
+        }
+
+        return {
+          response: response.response || 'I processed your message but got an empty response.',
+          agentInfo: response.agent_selection
+        };
+      } else {
+        console.error('Agent query failed:', response.error);
+
+        // Try lightweight agent as fallback
+        console.log('Trying lightweight agent as fallback...');
+        const fallbackResponse = await AgentService.queryAgent({
+          query: userMessage,
+          agent_type: 'lightweight'
+        });
+
+        if (fallbackResponse.success) {
+          return {
+            response: `[Fallback Response] ${fallbackResponse.response}`,
+            agentInfo: { selectedAgent: 'lightweight', confidence: 1.0 }
+          };
+        }
+
+        return {
+          response: `I encountered an error: ${response.error}. Please try again.`,
+          agentInfo: { selectedAgent: 'lightweight', confidence: 0.0 }
+        };
+      }
+    } catch (error) {
+      console.error('Failed to query agent:', error);
+      // Fallback to simple response
+      return {
+        response: `I understand you said: "${userMessage}". This is a fallback response while the agent service is unavailable.`,
+        agentInfo: { selectedAgent: 'lightweight', confidence: 0.0 }
+      };
+    }
   };
 
   // Enhanced message sending with better error handling
@@ -64,11 +96,20 @@ export function MainContent({ }: MainContentProps) {
           // Add user message to new session
           await addMessage(newSession.id, messageText, true);
 
-          // Simulate AI response after a short delay
+          // Generate AI response using agent service
           setTimeout(async () => {
             try {
-              const aiResponse = generateAIResponse(messageText);
-              await addMessage(newSession.id, aiResponse, false);
+              const aiResponseData = await generateAIResponse(messageText);
+
+              // Use intelligent truncation for long responses
+              const responseInfo = getResponseInfo(aiResponseData.response);
+              let responseText = aiResponseData.response;
+              if (responseInfo.isTooLong) {
+                console.log(`Response too long (${responseInfo.length} chars), truncating intelligently`);
+                responseText = truncateResponse(aiResponseData.response);
+              }
+
+              await addMessage(newSession.id, responseText, false, aiResponseData.agentInfo);
             } catch (error) {
               console.error('Failed to add AI response:', error);
               // Show user-friendly error
@@ -87,11 +128,27 @@ export function MainContent({ }: MainContentProps) {
       // Add user message
       await addMessage(activeSession.id, messageText, true);
 
-      // Simulate AI response after a short delay
+      // Generate AI response using agent service
       setTimeout(async () => {
         try {
-          const aiResponse = generateAIResponse(messageText);
-          await addMessage(activeSession.id, aiResponse, false);
+          const aiResponseData = await generateAIResponse(messageText);
+          console.log('AI Response Data:', aiResponseData); // Debug log
+          console.log('AI Response:', aiResponseData.response); // Debug log
+          console.log('AI Response length:', aiResponseData.response.length); // Debug log
+          console.log('AI Response type:', typeof aiResponseData.response); // Debug log
+          console.log('Session ID:', activeSession.id, 'Type:', typeof activeSession.id); // Debug log
+
+          // Use intelligent truncation for long responses
+          const responseInfo = getResponseInfo(aiResponseData.response);
+          console.log('Response info:', responseInfo);
+
+          let responseText = aiResponseData.response;
+          if (responseInfo.isTooLong) {
+            console.log(`Response too long (${responseInfo.length} chars), truncating intelligently`);
+            responseText = truncateResponse(aiResponseData.response);
+          }
+
+          await addMessage(activeSession.id, responseText, false, aiResponseData.agentInfo);
         } catch (error) {
           console.error('Failed to add AI response:', error);
           // Show user-friendly error
@@ -149,33 +206,35 @@ export function MainContent({ }: MainContentProps) {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full w-full">
       {/* Tab Navigation */}
       <div className="border-b">
-        <div className="flex">
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`px-4 py-2 text-sm font-medium ${activeTab === "chat"
-              ? "border-b-2 border-primary text-primary"
-              : "text-muted-foreground hover:text-foreground"
-              }`}
-          >
-            Chat
-          </button>
-          <button
-            onClick={() => setActiveTab("files")}
-            className={`px-4 py-2 text-sm font-medium ${activeTab === "files"
-              ? "border-b-2 border-primary text-primary"
-              : "text-muted-foreground hover:text-foreground"
-              }`}
-          >
-            Files
-          </button>
+        <div className="flex items-center px-4">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`px-4 py-2 text-sm font-medium ${activeTab === "chat"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveTab("files")}
+              className={`px-4 py-2 text-sm font-medium ${activeTab === "files"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
+            >
+              Files
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden w-full">
         {activeTab === "chat" ? (
           <ChatTab
             currentChatMessages={activeMessages}

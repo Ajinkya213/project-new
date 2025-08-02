@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../contexts/ChatContext';
+import { UserboardNavbar } from '../../components/userboard/UserboardNavbar';
 import { Sidebar } from '../../components/userboard/Sidebar';
 import { MainContent } from '../../components/userboard/MainContent';
 
@@ -11,7 +12,6 @@ export default function Userboard() {
   const { currentSession, sessions, addSession, setCurrentSession } = useChat();
   const navigate = useNavigate();
   const location = useLocation();
-
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/login');
@@ -39,8 +39,6 @@ export default function Userboard() {
       console.error('Logout failed:', error);
     }
   };
-
-
 
   const handleNewQuery = async () => {
     try {
@@ -72,16 +70,26 @@ export default function Userboard() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar
-        sessions={sessions}
-        currentSession={currentSession}
-        onNewQuery={handleNewQuery}
-        onSessionSelect={handleSessionSelect}
-        onLogout={handleLogout}
+    <div className="flex flex-col h-screen bg-background">
+      <UserboardNavbar
         user={user}
+        onLogout={handleLogout}
       />
-      <MainContent />
+      <div className="flex flex-1 pt-16 overflow-hidden">
+        <Sidebar
+          sessions={sessions}
+          currentSession={currentSession}
+          onNewQuery={handleNewQuery}
+          onSessionSelect={handleSessionSelect}
+          onLogout={handleLogout}
+          user={user}
+        />
+        <div className="flex-1 min-w-0 w-full">
+          <MainContent
+            currentSession={currentSession}
+          />
+        </div>
+      </div>
     </div>
   );
 }
