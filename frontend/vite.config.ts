@@ -11,4 +11,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    include: ['firebase/auth', 'firebase/app', 'firebase/firestore', 'firebase/storage']
+  },
+  server: {
+    port: 3000,
+    host: true,
+    strictPort: true,
+    hmr: {
+      port: 3000
+    }
+  }
 })

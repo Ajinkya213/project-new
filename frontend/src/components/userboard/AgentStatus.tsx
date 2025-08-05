@@ -29,7 +29,24 @@ export function AgentStatus({ className = '', showDetails = false }: AgentStatus
             setStatus('checking');
             setError(null);
 
+            console.log('Checking agent health...');
+
+            // First, let's test if the backend is reachable
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                console.log('Backend health check response:', response.status);
+                if (!response.ok) {
+                    throw new Error(`Backend health check failed: ${response.status}`);
+                }
+            } catch (backendError) {
+                console.error('Backend health check failed:', backendError);
+                setStatus('offline');
+                setError('Backend server is not reachable');
+                return;
+            }
+
             const health = await AgentService.getAgentHealth();
+            console.log('Agent health response:', health);
 
             if (health.status === 'healthy' || health.status === 'degraded') {
                 setStatus('online');
@@ -47,6 +64,7 @@ export function AgentStatus({ className = '', showDetails = false }: AgentStatus
                 setError(health.error || 'Agent is not responding');
             }
         } catch (err) {
+            console.error('Agent health check error:', err);
             setStatus('offline');
             setError(err instanceof Error ? err.message : 'Failed to check agent status');
         }

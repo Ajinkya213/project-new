@@ -110,75 +110,97 @@ class MultiModalRAG:
         return [img for img, _ in retrieved_images]
     
     def evaluate_retrieval_quality(self, retrieved_images: List[Tuple[Image.Image, Dict]], query: str) -> Dict:
-        """Evaluate the quality of retrieved images"""
+        """
+        Evaluate if the retrieved documents are sufficient to answer the query
+        """
         if not retrieved_images:
-            return {"quality": "poor", "reason": "No images retrieved"}
+            return {
+                "sufficient": False,
+                "confidence": "none",
+                "reason": "No documents retrieved"
+            }
         
-        # Simple quality metrics
+        # Simple heuristic: check average score and number of results
         avg_score = sum(metadata['score'] for _, metadata in retrieved_images) / len(retrieved_images)
-        num_images = len(retrieved_images)
         
-        quality = "excellent" if avg_score > 0.8 else "good" if avg_score > 0.6 else "poor"
-        
-        return {
-            "quality": quality,
-            "avg_score": avg_score,
-            "num_images": num_images,
-            "query": query
-        }
+        if avg_score > 0.8 and len(retrieved_images) >= 2:
+            return {"sufficient": True, "confidence": "high", "reason": "High relevance scores"}
+        elif avg_score > 0.6 and len(retrieved_images) >= 1:
+            return {"sufficient": True, "confidence": "medium", "reason": "Moderate relevance scores"}
+        else:
+            return {"sufficient": False, "confidence": "low", "reason": "Low relevance scores"}
     
     def generate_result(self, query_text: str) -> Dict:
         """
-        Generate a comprehensive result using multimodal RAG
+        Complete RAG workflow: search, retrieve images, and get response from Gemini
+        Returns structured result with metadata
         """
         try:
             # Search and retrieve images
             retrieved_images = self.search_and_retrieve(query_text)
             
+            # Evaluate retrieval quality
+            evaluation = self.evaluate_retrieval_quality(retrieved_images, query_text)
+            
             if not retrieved_images:
                 return {
                     "status": "no_results",
-                    "message": "No relevant documents found for your query.",
-                    "response": "I couldn't find any relevant information in the uploaded documents. Please try rephrasing your query or upload relevant documents."
+                    "message": "No relevant documents found for the query",
+                    "gemini_response": None,
+                    "retrieved_pages": 0,
+                    "metadata": [],
+                    "evaluation": evaluation
                 }
             
-            # Evaluate retrieval quality
-            quality_metrics = self.evaluate_retrieval_quality(retrieved_images, query_text)
+            image_metadata_list = [metadata for _, metadata in retrieved_images]
             
             # Prepare images for Gemini
-            images_for_gemini = self.prepare_for_gemini(retrieved_images)
+            gemini_images = self.prepare_for_gemini(retrieved_images)
             
-            # Generate multimodal response
+            # Create prompt for Gemini
             prompt = f"""
-            Based on the following query and the retrieved document images, provide a comprehensive answer.
-            
-            Query: {query_text}
-            
-            Please analyze the document images and provide:
-            1. A direct answer to the query
-            2. Key information from the documents
-            3. Document references (filename and page numbers)
-            
-            Be specific and reference the document content accurately.
+                You are an AI model specialized in image analysis and question answering.
+                Carefully analyze the image(s) as well as the metadata related to it and answer the query.
+
+                Query:
+                {query_text}
+
+                Metadata from Images:
+                {image_metadata_list}
+
+                Instructions:
+                - Return your answer in the following JSON format:
+                [
+                {{
+                    "response": "<your detailed answer>",
+                    "page_number": <page number>,
+                    "document_name": "<document name>",
+                    "confidence": "<high/medium/low>"
+                }}
+                ]
+                If multiple pages are relevant, return a list of such objects.
+                If no answer is found, return:
+                [{{"response": "No relevant information found in the retrieved documents.", "page_number": null, "document_name": null, "confidence": "low"}}]
             """
             
-            if images_for_gemini:
-                # Use multimodal model with images
-                response = self.model.generate_content([prompt, *images_for_gemini])
-            else:
-                # Fallback to text-only
-                response = self.model.generate_content(prompt)
+            # Get response from Gemini
+            chat = self.model.start_chat()
+            response = chat.send_message([prompt, *gemini_images])
             
             return {
                 "status": "success",
                 "response": response.text,
-                "quality_metrics": quality_metrics,
-                "num_images_processed": len(images_for_gemini)
+                "retrieved_pages": len(retrieved_images),
+                "metadata": image_metadata_list,
+                "evaluation": evaluation
             }
             
         except Exception as e:
             return {
                 "status": "error",
-                "message": f"Error processing query: {str(e)}",
-                "response": "I encountered an error while processing your query. Please try again."
+                "message": f"Error during RAG process: {str(e)}",
+                "gemini_response": None,
+                "retrieved_pages": 0,
+                "metadata": [],
+                "evaluation": {"sufficient": False, "confidence": "none", "reason": "Error occurred"}
             } 

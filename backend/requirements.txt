@@ -1,38 +1,75 @@
+# Core Flask Framework
 Flask==2.3.3
-Flask-SQLAlchemy==3.0.5
-Flask-JWT-Extended==4.5.3
 Flask-CORS==4.0.0
-Flask-Migrate==4.0.5
-PyMySQL==1.1.0
-cryptography==41.0.7
-python-dotenv==1.0.0
+Flask-SQLAlchemy==3.0.5
 Werkzeug==2.3.7
 
-# AI/ML Libraries
-google-generativeai
-crewai
-crewai-tools
+# Firebase Integration
+firebase-admin==6.2.0
+
+# AI and Machine Learning
+crewai==0.11.0
+langchain==0.0.267
+langchain-google-genai==0.0.3
+google-generativeai==0.3.1
 
 # Vector Database
-qdrant-client
+qdrant-client==1.6.9
 
-# PDF and Image Processing
-pdf2image
-pymupdf
-PyPDF2
-Pillow
+# PDF Processing
+PyMuPDF==1.23.8
+pdf2image==1.16.3
+Pillow==10.0.1
 
-# Web search tool
-tavily-python
+# Image Processing
+opencv-python==4.8.1.78
+numpy==1.24.3
 
-# Data processing
-pydantic
-numpy
-pandas
+# HTTP and API
+requests==2.31.0
+httpx==0.24.1
+
+# Environment and Configuration
+python-dotenv==1.0.0
+pydantic==2.4.2
+
+# Database
+SQLAlchemy==2.0.21
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Development and Testing
+pytest==7.4.2
+pytest-cov==4.1.0
+black==23.9.1
+flake8==6.1.0
 
 # Security
-passlib
-bcrypt
+cryptography==41.0.4
 
-# Other dependencies
-python-multipart
+# Async Support
+asyncio==3.4.3
+
+# Caching
+cachecontrol==0.13.1
+
+# Logging
+loguru==0.7.2
+
+# Data Processing
+pandas==2.0.3
+
+# Text Processing
+sentence-transformers==2.2.2
+transformers==4.33.2
+
+# Web Search (Optional)
+tavily-python==0.2.8
+
+# Monitoring
+prometheus-client==0.17.1
+
+# Production
+gunicorn==21.2.0

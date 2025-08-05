@@ -12,8 +12,8 @@ class ChatSession(db.Model):
     # Session information
     title = db.Column(db.String(255), nullable=False)
     
-    # Foreign key to user
-    user_id = db.Column(db.String(255), db.ForeignKey('users.id'), nullable=False)
+    # User ID (no foreign key constraint)
+    user_id = db.Column(db.String(255), nullable=False, default='1')
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -131,8 +131,8 @@ class Document(db.Model):
     file_size = db.Column(db.Integer, nullable=False)  # Size in bytes
     file_type = db.Column(db.String(100), nullable=False)
     
-    # Foreign key to user
-    user_id = db.Column(db.String(255), db.ForeignKey('users.id'), nullable=False)
+    # User ID (no foreign key constraint)
+    user_id = db.Column(db.String(255), nullable=False, default='1')
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

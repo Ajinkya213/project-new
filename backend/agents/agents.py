@@ -1,156 +1,253 @@
-#!/usr/bin/env python3
 """
-Agent definitions for the chat application
+Agent Layer - AI agent orchestration and management
+Implements the agent system with CrewAI integration and tool management
 """
 
-import os
-import google.generativeai as genai
+from typing import Dict, Any, List, Optional
+from crewai import Agent, Task, Crew
+from crewai.tools import BaseTool
+import asyncio
+import time
 from datetime import datetime
-from crewai import Agent
-from .tools import search_web, retrieve_from_document
 
-# Configure Gemini AI
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# Import tools
+from agents.tools import get_available_tools, get_tool_by_name
 
-# Agent Status Tracking
-class AgentStatus:
-    """Track agent status and performance"""
-    
-    def __init__(self):
-        self.status = "offline"
-        self.last_activity = None
-        self.total_queries = 0
-        self.successful_queries = 0
-        self.failed_queries = 0
-        self.average_response_time = 0
-        self.response_times = []
-    
-    def update_status(self, status: str):
-        """Update agent status"""
-        self.status = status
-    
-    def record_query(self, success: bool, response_time: float):
-        """Record query performance"""
-        self.total_queries += 1
-        if success:
-            self.successful_queries += 1
+# Agent status tracking
+_agent_status = {
+    'lightweight': {'status': 'online', 'last_used': None},
+    'document': {'status': 'online', 'last_used': None},
+    'web_search': {'status': 'online', 'last_used': None},
+    'multimodal': {'status': 'online', 'last_used': None},
+    'research': {'status': 'online', 'last_used': None}
+}
+
+def get_agent_status(agent_type: str = None) -> Dict[str, Any]:
+    """
+    Get status of agents
+    """
+    if agent_type:
+        return _agent_status.get(agent_type, {'status': 'unknown'})
+    return _agent_status
+
+def update_agent_status(agent_type: str, status: str):
+    """
+    Update agent status
+    """
+    if agent_type in _agent_status:
+        _agent_status[agent_type]['status'] = status
+        _agent_status[agent_type]['last_used'] = datetime.now().isoformat()
+
+def get_agent(agent_type: str) -> Optional[Agent]:
+    """
+    Get agent instance by type
+    """
+    try:
+        if agent_type == 'lightweight':
+            return create_lightweight_agent()
+        elif agent_type == 'document':
+            return create_document_agent()
+        elif agent_type == 'web_search':
+            return create_web_search_agent()
+        elif agent_type == 'multimodal':
+            return create_multimodal_agent()
+        elif agent_type == 'research':
+            return create_research_agent()
         else:
-            self.failed_queries += 1
-        
-        self.response_times.append(response_time)
-        if len(self.response_times) > 100:  # Keep last 100 times
-            self.response_times.pop(0)
-        
-        self.average_response_time = sum(self.response_times) / len(self.response_times)
-        self.last_activity = datetime.now()
+            print(f"[WARNING] Unknown agent type: {agent_type}")
+            return create_lightweight_agent()
+    except Exception as e:
+        print(f"[ERROR] Failed to create agent {agent_type}: {e}")
+        return None
+
+def create_lightweight_agent() -> Agent:
+    """
+    Create lightweight agent for fast responses
+    """
+    tools = get_available_tools()
+    lightweight_tools = [tool for tool in tools if tool.get('category') in ['basic', 'utility']]
     
-    def get_stats(self):
-        """Get agent statistics"""
-        success_rate = (self.successful_queries / self.total_queries * 100) if self.total_queries > 0 else 0
+    return Agent(
+        role="Lightweight Assistant",
+        goal="Provide quick, accurate responses to general queries",
+        backstory="You are a helpful AI assistant focused on providing fast and accurate responses to user queries.",
+        tools=[get_tool_by_name(tool['name']) for tool in lightweight_tools if get_tool_by_name(tool['name'])],
+        verbose=True,
+        allow_delegation=False
+    )
+
+def create_document_agent() -> Agent:
+    """
+    Create document processing agent
+    """
+    tools = get_available_tools()
+    document_tools = [tool for tool in tools if tool.get('category') in ['document', 'search']]
+    
+    return Agent(
+        role="Document Analysis Specialist",
+        goal="Analyze and extract information from uploaded documents",
+        backstory="You are an expert at analyzing documents, extracting key information, and providing insights based on document content.",
+        tools=[get_tool_by_name(tool['name']) for tool in document_tools if get_tool_by_name(tool['name'])],
+        verbose=True,
+        allow_delegation=False
+    )
+
+def create_web_search_agent() -> Agent:
+    """
+    Create web search agent
+    """
+    tools = get_available_tools()
+    web_tools = [tool for tool in tools if tool.get('category') in ['web_search', 'research']]
+    
+    return Agent(
+        role="Web Research Specialist",
+        goal="Search the web for current information and provide comprehensive research results",
+        backstory="You are an expert at searching the web for current information, analyzing search results, and providing comprehensive answers.",
+        tools=[get_tool_by_name(tool['name']) for tool in web_tools if get_tool_by_name(tool['name'])],
+        verbose=True,
+        allow_delegation=False
+    )
+
+def create_multimodal_agent() -> Agent:
+    """
+    Create multimodal agent for text and image processing
+    """
+    tools = get_available_tools()
+    multimodal_tools = [tool for tool in tools if tool.get('category') in ['multimodal', 'image', 'vision']]
+    
+    return Agent(
+        role="Multimodal Analysis Specialist",
+        goal="Process and analyze both text and image content",
+        backstory="You are an expert at analyzing both text and visual content, providing insights from images, charts, and documents.",
+        tools=[get_tool_by_name(tool['name']) for tool in multimodal_tools if get_tool_by_name(tool['name'])],
+        verbose=True,
+        allow_delegation=False
+    )
+
+def create_research_agent() -> Agent:
+    """
+    Create research agent for comprehensive analysis
+    """
+    tools = get_available_tools()
+    research_tools = [tool for tool in tools if tool.get('category') in ['research', 'analysis', 'web_search']]
+    
+    return Agent(
+        role="Research Analyst",
+        goal="Conduct comprehensive research and provide detailed analysis",
+        backstory="You are an expert researcher who can conduct thorough analysis, gather information from multiple sources, and provide detailed insights.",
+        tools=[get_tool_by_name(tool['name']) for tool in research_tools if get_tool_by_name(tool['name'])],
+        verbose=True,
+        allow_delegation=False
+    )
+
+def execute_agent_task(agent: Agent, task_description: str, context: Dict = None) -> Dict[str, Any]:
+    """
+    Execute a task with an agent
+    """
+    try:
+        start_time = time.time()
+        
+        # Create task
+        task = Task(
+            description=task_description,
+            agent=agent,
+            context=context or {}
+        )
+        
+        # Create crew with single agent
+        crew = Crew(
+            agents=[agent],
+            tasks=[task],
+            verbose=True
+        )
+        
+        # Execute task
+        result = crew.kickoff()
+        
+        processing_time = time.time() - start_time
+        
         return {
-            "status": self.status,
-            "total_queries": self.total_queries,
-            "successful_queries": self.successful_queries,
-            "failed_queries": self.failed_queries,
-            "success_rate": round(success_rate, 2),
-            "average_response_time": round(self.average_response_time, 2),
-            "last_activity": self.last_activity.isoformat() if self.last_activity else None
+            'status': 'success',
+            'output': result,
+            'processing_time': processing_time,
+            'agent_type': agent.role,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'processing_time': time.time() - start_time if 'start_time' in locals() else 0,
+            'timestamp': datetime.now().isoformat()
         }
 
-# Initialize agent status trackers
-agent_statuses = {
-    "multimodal": AgentStatus(),
-    "chat": AgentStatus(),
-    "document": AgentStatus(),
-    "research": AgentStatus(),
-    "lightweight": AgentStatus()
-}
+def get_agent_capabilities() -> Dict[str, List[str]]:
+    """
+    Get capabilities of each agent type
+    """
+    return {
+        'lightweight': [
+            'General conversation',
+            'Basic information retrieval',
+            'Fast responses',
+            'Simple calculations'
+        ],
+        'document': [
+            'Document analysis',
+            'Text extraction',
+            'Content summarization',
+            'Document search'
+        ],
+        'web_search': [
+            'Web search',
+            'Current information retrieval',
+            'News and updates',
+            'Real-time data'
+        ],
+        'multimodal': [
+            'Image analysis',
+            'Visual content processing',
+            'Chart and graph interpretation',
+            'Document image analysis'
+        ],
+        'research': [
+            'Comprehensive research',
+            'Multi-source analysis',
+            'Detailed reporting',
+            'Academic research'
+        ]
+    }
 
-# Create the main multimodal agent (from feature folder)
-multimodal_agent = Agent(
-    role="Multimodal Retrieval Agent",
-    goal="Answer queries using local data or fallback to web",
-    backstory="You are a research assistant trained in visual document understanding. "
-              "Your job is to retrieve relevant pages from internal documents (including the document name and the page number for the document) and fall back to the internet if needed.",
-    tools=[search_web, retrieve_from_document],
-    verbose=True,
-    llm='gemini/gemini-2.5-flash',
-    max_iter=3  # Limit iterations to avoid rate limits
-)
-
-# Create chat agent
-chat_agent = Agent(
-    role="Chat Assistant",
-    goal="Provide helpful and engaging conversation",
-    backstory="You are a friendly AI assistant that helps users with general questions and conversation. "
-              "You provide clear, helpful responses and engage in natural conversation.",
-    verbose=True,
-    llm='gemini/gemini-2.5-flash',
-    max_iter=2  # Limit iterations to avoid rate limits
-)
-
-# Create document analysis agent
-document_agent = Agent(
-    role="Document Analyst",
-    goal="Analyze and extract insights from documents",
-    backstory="You are an expert at analyzing documents and extracting key information, insights, and summaries. "
-              "You can understand complex documents and provide clear analysis.",
-    tools=[retrieve_from_document],
-    verbose=True,
-    llm='gemini/gemini-2.5-flash',
-    max_iter=2  # Limit iterations to avoid rate limits
-)
-
-# Create research agent
-research_agent = Agent(
-    role="Research Assistant",
-    goal="Conduct comprehensive research on topics",
-    backstory="You are a research assistant that can search the web and analyze information to provide comprehensive answers. "
-              "You gather information from multiple sources and synthesize findings.",
-    tools=[search_web],
-    verbose=True,
-    llm='gemini/gemini-2.5-flash',
-    max_iter=2  # Limit iterations to avoid rate limits
-)
-
-# Create lightweight agent (simple, fast responses)
-lightweight_agent = Agent(
-    role="Lightweight Assistant",
-    goal="Provide quick and simple responses",
-    backstory="You are a simple AI assistant that provides direct and helpful responses to basic queries. "
-              "You focus on speed and clarity over complexity.",
-    verbose=True,
-    llm='gemini/gemini-2.5-flash',
-    max_iter=1  # Limit iterations to avoid rate limits
-)
-
-# Agent mapping
-agents = {
-    "multimodal": multimodal_agent,
-    "chat": chat_agent,
-    "document": document_agent,
-    "research": research_agent,
-    "lightweight": lightweight_agent
-}
-
-def get_agent_by_type(agent_type: str):
-    """Get agent by type"""
-    return agents.get(agent_type)
-
-def get_agent_status(agent_type: str = None):
-    """Get agent status"""
-    if agent_type:
-        return agent_statuses.get(agent_type, AgentStatus()).get_stats()
-    else:
-        return {agent_type: status.get_stats() for agent_type, status in agent_statuses.items()}
-
-def update_agent_status(agent_type: str, status: str, success: bool = None, response_time: float = None):
-    """Update agent status and performance"""
-    if agent_type in agent_statuses:
-        agent_status = agent_statuses[agent_type]
-        agent_status.update_status(status)
-        if success is not None and response_time is not None:
-            agent_status.record_query(success, response_time)
-
-# Alias for compatibility with feature folder
-agent = multimodal_agent 
+def get_agent_recommendations(query: str) -> Dict[str, float]:
+    """
+    Get agent recommendations based on query content
+    """
+    query_lower = query.lower()
+    recommendations = {}
+    
+    # Document-related keywords
+    doc_keywords = ['document', 'pdf', 'file', 'upload', 'content', 'text', 'page', 'section']
+    if any(keyword in query_lower for keyword in doc_keywords):
+        recommendations['document'] = 0.9
+    
+    # Web search keywords
+    web_keywords = ['latest', 'news', 'current', 'today', 'weather', 'stock', 'price', 'what is', 'how to']
+    if any(keyword in query_lower for keyword in web_keywords):
+        recommendations['web_search'] = 0.8
+    
+    # Multimodal keywords
+    multimodal_keywords = ['image', 'picture', 'photo', 'chart', 'graph', 'visual', 'see', 'show']
+    if any(keyword in query_lower for keyword in multimodal_keywords):
+        recommendations['multimodal'] = 0.9
+    
+    # Research keywords
+    research_keywords = ['research', 'study', 'analysis', 'comprehensive', 'detailed', 'investigate']
+    if any(keyword in query_lower for keyword in research_keywords):
+        recommendations['research'] = 0.8
+    
+    # Default to lightweight if no specific recommendations
+    if not recommendations:
+        recommendations['lightweight'] = 0.7
+    
+    return recommendations 

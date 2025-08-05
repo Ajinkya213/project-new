@@ -2,7 +2,7 @@
 import * as React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Brain, User, Bot, Search, FileText, MessageSquare, Zap } from "lucide-react";
+import { Brain, User, Bot, Search, FileText, MessageSquare, Zap, Database, Globe, BookOpen, Link } from "lucide-react";
 
 interface Message {
   id: string;
@@ -12,7 +12,15 @@ interface Message {
   agentInfo?: {
     selectedAgent?: string;
     confidence?: number;
+    documentsUsed?: string[];
+    sources?: string[];
+    searchResults?: number;
   };
+  documentAttachments?: {
+    filename: string;
+    pages?: number;
+    status: 'uploading' | 'processing' | 'completed' | 'failed';
+  }[];
 }
 
 interface ChatMessageProps {
@@ -70,6 +78,18 @@ const getAgentDisplayName = (agentType?: string) => {
   }
 };
 
+const getSourceIcon = (source: string) => {
+  if (source.includes('document') || source.includes('pdf')) {
+    return <FileText className="w-3 h-3" />;
+  } else if (source.includes('web') || source.includes('search')) {
+    return <Globe className="w-3 h-3" />;
+  } else if (source.includes('qdrant') || source.includes('database')) {
+    return <Database className="w-3 h-3" />;
+  } else {
+    return <Link className="w-3 h-3" />;
+  }
+};
+
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.sender === "user";
   const agentInfo = message.agentInfo;
@@ -106,14 +126,47 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   </span>
                 )}
               </Badge>
+
+              {/* Sources Information */}
+              {agentInfo?.sources && agentInfo.sources.length > 0 && (
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                  <Database className="w-3 h-3 mr-1" />
+                  {agentInfo.sources.length} sources
+                </Badge>
+              )}
+
+              {/* Search Results Count */}
+              {agentInfo?.searchResults && agentInfo.searchResults > 0 && (
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                  <Search className="w-3 h-3 mr-1" />
+                  {agentInfo.searchResults} results
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Document Attachments for User messages */}
+          {isUser && message.documentAttachments && message.documentAttachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {message.documentAttachments.map((doc, index) => (
+                <Badge
+                  key={index}
+                  variant="outline"
+                  className="bg-purple-50 text-purple-700 border-purple-200 text-xs"
+                >
+                  <FileText className="w-3 h-3 mr-1" />
+                  {doc.filename}
+                  {doc.pages && ` (${doc.pages} pages)`}
+                </Badge>
+              ))}
             </div>
           )}
 
           {/* Message Bubble */}
           <div
             className={`px-4 py-3 rounded-2xl max-w-full ${isUser
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-foreground border border-border"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-foreground border border-border"
               }`}
           >
             <div className="whitespace-pre-wrap break-words">

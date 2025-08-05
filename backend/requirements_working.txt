@@ -1,0 +1,54 @@
+# Core Flask dependencies
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-JWT-Extended==4.5.3
+Flask-CORS==4.0.0
+Flask-Migrate==4.0.5
+Werkzeug==2.3.7
+
+# Database
+PyMySQL==1.1.0
+
+# Security
+cryptography==41.0.7
+passlib
+bcrypt
+
+# Environment
+python-dotenv==1.0.0
+
+# Firebase (essential for your app)
+firebase-admin==6.2.0
+google-cloud-firestore==2.11.1
+
+# PDF Processing (essential for your app)
+pdf2image
+pymupdf
+PyPDF2
+Pillow
+
+# Data processing
+pydantic
+numpy
+pandas
+
+# File upload
+python-multipart
+
+# AI/ML Libraries (successfully installed)
+google-generativeai
+crewai
+crewai-tools
+
+# Vector Database (successfully installed)
+qdrant-client
+
+# Web search (successfully installed)
+tavily-python
+
+# Note: The following packages were problematic and are NOT included:
+# - tiktoken (requires Rust compiler)
+# - regex (requires compilation)
+# - grpcio-tools (requires Microsoft Visual C++ Build Tools)
+# 
+# These packages are not directly used in your codebase and can be skipped. 

@@ -2,6 +2,7 @@ import type { RouteObject } from "react-router-dom"
 import Login from "@/features/auth/Login"
 import Signup from "@/features/auth/Signup"
 import Userboard from "@/features/userboard/Userboard"
+import { UserProfileWrapper } from "@/features/userboard/UserProfileWrapper"
 import Landing from "@/features/landing/Landing"
 import FeaturesPage from "@/features/landing/pages/FeaturesPage"
 import PricingPage from "@/features/landing/pages/PricingPage"
@@ -18,6 +19,14 @@ const AppRoutes: RouteObject[] = [
         element: (
             <ProtectedRoute>
                 <Userboard />
+            </ProtectedRoute>
+        )
+    },
+    {
+        path: "/profile",
+        element: (
+            <ProtectedRoute>
+                <UserProfileWrapper />
             </ProtectedRoute>
         )
     },

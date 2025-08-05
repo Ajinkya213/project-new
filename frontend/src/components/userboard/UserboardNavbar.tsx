@@ -1,52 +1,13 @@
 // components/userboard/UserboardNavbar.tsx
-import React, { useState } from 'react';
-import { Brain, Menu, LogOut } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { AgentStatus } from './AgentStatus';
+import * as React from "react";
+import { Link } from "react-router-dom";
+import { Brain, Menu } from "lucide-react";
+import { Button } from "../ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
+import { AgentStatus } from "./AgentStatus";
 
-interface UserboardNavbarProps {
-    user: any;
-    onLogout: () => void;
-}
-
-export function UserboardNavbar({
-    user,
-    onLogout
-}: UserboardNavbarProps) {
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const navigate = useNavigate();
-
-    // Close dropdowns when clicking outside
-    React.useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as Element;
-            if (!target.closest('.dropdown-container')) {
-                // setShowUserMenu(false); // This state was removed
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, []);
-
-    // Removed theme-related useEffects
-
-    // Removed toggleTheme function
-
-    // Get initials for user avatar
-    const getInitials = (text: string) => {
-        return text
-            .split(' ')
-            .map(word => word.charAt(0))
-            .join('')
-            .toUpperCase()
-            .slice(0, 2);
-    };
+export function UserboardNavbar() {
+    const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
     return (
         <nav className="fixed w-full z-50 bg-background/80 backdrop-blur-lg border-b border-border">
@@ -103,26 +64,6 @@ export function UserboardNavbar({
                                     <div className="space-y-2">
                                         <p className="text-sm font-medium text-muted-foreground">Agent Status</p>
                                         <AgentStatus showDetails={true} />
-                                    </div>
-
-                                    <div className="border-t pt-4">
-                                        <div className="flex items-center space-x-3 mb-4">
-                                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-semibold">
-                                                {getInitials(user?.username || 'User')}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold">{user?.username || 'User'}</p>
-                                                <p className="text-xs text-muted-foreground">{user?.email || 'user@example.com'}</p>
-                                            </div>
-                                        </div>
-                                        <Button
-                                            onClick={onLogout}
-                                            variant="ghost"
-                                            className="w-full justify-start text-destructive"
-                                        >
-                                            <LogOut className="h-4 w-4 mr-2" />
-                                            Sign Out
-                                        </Button>
                                     </div>
                                 </div>
                             </SheetContent>

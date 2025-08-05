@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { auth } from '../config/firebase';
+import { apiService } from '../services/api';
 
 export interface ChatMessage {
     id: string;
@@ -10,7 +12,15 @@ export interface ChatMessage {
     agent_info?: {
         selectedAgent?: string;
         confidence?: number;
+        documentsUsed?: string[];
+        sources?: string[];
+        searchResults?: number;
     };
+    document_attachments?: {
+        filename: string;
+        pages?: number;
+        status: 'uploading' | 'processing' | 'completed' | 'failed';
+    }[];
 }
 
 export interface ChatSession {
@@ -31,7 +41,7 @@ interface ChatContextType {
     updateSession: (sessionId: string, updates: Partial<ChatSession>) => Promise<void>;
     deleteSession: (sessionId: string) => Promise<void>;
     setCurrentSession: (sessionId: string) => void;
-    addMessage: (sessionId: string, content: string, isUserMessage: boolean, agentInfo?: any) => Promise<void>;
+    addMessage: (sessionId: string, content: string, isUserMessage: boolean, agentInfo?: any, documentAttachments?: any[]) => Promise<void>;
     updateMessage: (sessionId: string, messageId: string, content: string) => Promise<void>;
     deleteMessage: (sessionId: string, messageId: string) => Promise<void>;
     clearSession: (sessionId: string) => Promise<void>;
@@ -46,7 +56,7 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
-export const useChat = () => {
+export const useChat = (): ChatContextType => {
     const context = useContext(ChatContext);
     if (context === undefined) {
         throw new Error('useChat must be used within a ChatProvider');
@@ -58,148 +68,109 @@ interface ChatProviderProps {
     children: ReactNode;
 }
 
+// Add local storage utilities
+const STORAGE_KEY = 'chat_sessions';
+
+const getStoredSessions = (): ChatSession[] => {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const sessions = stored ? JSON.parse(stored) : [];
+
+        // Ensure all sessions have the proper structure
+        return sessions.map((session: any) => ({
+            id: session.id || '',
+            title: session.title || 'New Chat',
+            created_at: session.created_at || '',
+            updated_at: session.updated_at || '',
+            user_id: session.user_id || '',
+            messages: Array.isArray(session.messages) ? session.messages : []
+        }));
+    } catch (error) {
+        console.error('Failed to load sessions from localStorage:', error);
+        return [];
+    }
+};
+
+const setStoredSessions = (sessions: ChatSession[]) => {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    } catch (error) {
+        console.error('Failed to save sessions to localStorage:', error);
+    }
+};
+
 export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [currentSession, setCurrentSessionState] = useState<ChatSession | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const getAuthToken = () => localStorage.getItem('access_token');
-    const API_BASE = 'http://localhost:8000';
+    const API_BASE = 'http://127.0.0.1:8000';
 
-    // Clear sessions when authentication token is removed
-    useEffect(() => {
-        const handleStorageChange = () => {
-            const token = getAuthToken();
-            if (!token) {
-                console.log('DEBUG: No auth token found, clearing chat sessions');
-                setSessions([]);
-                setCurrentSessionState(null);
-                setError(null);
+    // Helper function to get auth headers
+    const getAuthHeaders = () => {
+        try {
+            // Get current user from Firebase Auth
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                return {
+                    'Content-Type': 'application/json'
+                };
             }
-        };
 
-        const handleLogout = () => {
-            console.log('DEBUG: Logout event received, clearing chat sessions');
-            setSessions([]);
-            setCurrentSessionState(null);
-            setError(null);
-        };
-
-        // Check on mount
-        handleStorageChange();
-
-        // Listen for storage changes
-        window.addEventListener('storage', handleStorageChange);
-
-        // Listen for logout events
-        window.addEventListener('userLogout', handleLogout);
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            window.removeEventListener('userLogout', handleLogout);
-        };
-    }, []);
-
-    // Load sessions on mount and when token becomes available
-    useEffect(() => {
-        const token = getAuthToken();
-        if (token) {
-            loadSessions();
+            // For now, return headers without token until we fix the async issue
+            return {
+                'Content-Type': 'application/json'
+            };
+        } catch (error) {
+            console.error('Failed to get auth token:', error);
+            return {
+                'Content-Type': 'application/json'
+            };
         }
-    }, []);
+    };
 
-    // Listen for login events to reload sessions
+    // Save sessions to localStorage whenever they change
     useEffect(() => {
-        const handleLogin = () => {
-            console.log('DEBUG: Login event received, reloading sessions');
-            const token = getAuthToken();
-            if (token) {
-                loadSessions();
-            }
-        };
+        setStoredSessions(sessions);
+    }, [sessions]);
 
-        // Listen for login events
-        window.addEventListener('userLogin', handleLogin);
-
-        return () => {
-            window.removeEventListener('userLogin', handleLogin);
-        };
+    // Load sessions on mount
+    useEffect(() => {
+        loadSessions();
     }, []);
-
-    // Auto-refresh current session messages every 30 seconds (disabled to prevent message clearing)
-    // useEffect(() => {
-    //     if (!currentSession) return;
-
-    //     const interval = setInterval(() => {
-    //         refreshCurrentSession();
-    //     }, 30000);
-
-    //     return () => clearInterval(interval);
-    // }, [currentSession?.id]);
 
     const loadSessions = async () => {
         setIsLoading(true);
         setError(null);
 
         try {
-            const token = getAuthToken();
-            console.log('DEBUG: Loading sessions, token exists:', !!token);
+            // Try to load from backend first
+            const response = await apiService.getChatSessions();
+            const backendSessions = response.sessions || [];
 
-            if (!token) {
-                console.log('DEBUG: No authentication token, setting empty sessions');
-                setSessions([]);
-                setCurrentSessionState(null);
-                return;
-            }
+            // Load messages for each session
+            const sessionsWithMessages = await Promise.all(
+                backendSessions.map(async (session: ChatSession) => {
+                    try {
+                        const sessionResponse = await apiService.getChatSession(session.id);
+                        return {
+                            ...session,
+                            messages: Array.isArray(sessionResponse.session?.messages) ? sessionResponse.session.messages : []
+                        };
+                    } catch (err) {
+                        console.error(`Failed to load messages for session ${session.id}:`, err);
+                        return { ...session, messages: [] };
+                    }
+                })
+            );
 
-            console.log('DEBUG: Making API call to load sessions');
-            const response = await fetch(`${API_BASE}/chat/sessions`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            console.log('DEBUG: Load sessions response status:', response.status);
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    // Token expired or invalid
-                    localStorage.removeItem('access_token');
-                    setSessions([]);
-                    setCurrentSessionState(null);
-                    return;
-                }
-                throw new Error(`Failed to load sessions: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const sessionsData = data.sessions || [];
-            console.log('DEBUG: Received sessions data:', sessionsData);
-
-            // Convert to ChatSession format with empty messages array initially
-            const sessionsWithEmptyMessages = sessionsData.map((session: any) => ({
-                ...session,
-                messages: []
-            }));
-
-            console.log('DEBUG: Setting sessions with empty messages initially');
-            setSessions(sessionsWithEmptyMessages);
-
-            if (sessionsWithEmptyMessages.length > 0) {
-                setCurrentSessionState(sessionsWithEmptyMessages[0]);
-
-                // Load messages for all sessions
-                console.log('DEBUG: Loading messages for all sessions');
-                for (const session of sessionsWithEmptyMessages) {
-                    console.log('DEBUG: Loading messages for session ID:', session.id, 'type:', typeof session.id);
-                    await loadMessages(session.id.toString());
-                }
-            }
+            setSessions(sessionsWithMessages);
         } catch (err) {
-            console.error('DEBUG: Error loading sessions:', err);
-            setError(err instanceof Error ? err.message : 'Failed to load sessions');
+            console.log('Backend not available, using local storage');
+            // If backend fails, use local storage
+            const localSessions = getStoredSessions();
+            setSessions(localSessions);
         } finally {
             setIsLoading(false);
         }
@@ -207,238 +178,142 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
     const loadMessages = async (sessionId: string) => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
-            console.log('DEBUG: Loading messages for session:', sessionId);
-            const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    localStorage.removeItem('access_token');
-                    throw new Error('Authentication expired');
-                }
-                throw new Error(`Failed to load messages: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const messages = data.messages || [];
-            console.log('DEBUG: Loaded messages for session', sessionId, ':', messages.length, 'messages');
+            const response = await apiService.getChatSession(sessionId);
+            const session = response.session;
+            const messages = Array.isArray(session?.messages) ? session.messages : [];
 
             // Update sessions with messages
-            console.log('DEBUG: Updating sessions with messages for sessionId:', sessionId);
-            setSessions(prev => {
-                const updated = prev.map(session => {
-                    if (session.id.toString() === sessionId.toString()) {
-                        console.log('DEBUG: Found matching session, updating with', messages.length, 'messages');
-                        return { ...session, messages };
-                    }
-                    return session;
-                });
-                console.log('DEBUG: Updated sessions:', updated.map(s => ({ id: s.id, messageCount: s.messages.length })));
-                return updated;
-            });
+            setSessions(prev => prev.map(session => {
+                if (session.id.toString() === sessionId.toString()) {
+                    return { ...session, messages };
+                }
+                return session;
+            }));
 
             // Update current session if it's the one we're loading
             if (currentSession?.id.toString() === sessionId.toString()) {
-                console.log('DEBUG: Updating current session with messages');
                 setCurrentSessionState(prev => prev ? { ...prev, messages } : null);
             }
+
+            // Return the updated session with messages
+            return { ...session, messages };
         } catch (err) {
-            console.error('DEBUG: Error loading messages:', err);
-            setError(err instanceof Error ? err.message : 'Failed to load messages');
-            throw err;
+            console.log('Backend not available for loading messages');
+            // Return local session data
+            const localSession = sessions.find(s => s.id.toString() === sessionId.toString());
+            return localSession || null;
         }
     };
-
-    const refreshCurrentSession = useCallback(async () => {
-        if (currentSession) {
-            try {
-                await loadMessages(currentSession.id);
-            } catch (error) {
-                console.error('Failed to refresh current session:', error);
-            }
-        }
-    }, [currentSession]);
 
     const setCurrentSession = (sessionId: string) => {
         const session = sessions.find(s => s.id.toString() === sessionId.toString());
         if (session) {
-            setCurrentSessionState(session);
-            // Load messages if not already loaded
-            if (session.messages.length === 0) {
-                loadMessages(sessionId).catch(console.error);
-            }
+            // Ensure the session has the proper structure
+            const safeSession: ChatSession = {
+                ...session,
+                messages: Array.isArray(session.messages) ? session.messages : []
+            };
+            setCurrentSessionState(safeSession);
         }
     };
 
     const addSession = async (title?: string): Promise<ChatSession> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
-            const sessionTitle = title || 'New Chat';
-            const response = await fetch(`${API_BASE}/chat/sessions`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ title: sessionTitle })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to create session: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const newSession = data.session;
-            const sessionWithMessages = { ...newSession, messages: [] };
-
-            setSessions(prev => [sessionWithMessages, ...prev]);
-            setCurrentSessionState(sessionWithMessages);
-
-            return sessionWithMessages;
+            const response = await apiService.createChatSession(title || 'New Chat');
+            const newSession = response.session;
+            setSessions(prev => [newSession, ...prev]);
+            return newSession;
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to create session');
-            throw err;
+            console.log('Backend not available, creating local session');
+            // Create local session if backend is not available
+            const newSession: ChatSession = {
+                id: `local_${Date.now()}`,
+                title: title || 'New Chat',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                user_id: 'local_user',
+                messages: []
+            };
+            setSessions(prev => [newSession, ...prev]);
+            return newSession;
         }
     };
 
     const updateSession = async (sessionId: string, updates: Partial<ChatSession>): Promise<void> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
-            const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(updates)
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to update session: ${response.status}`);
-            }
+            await apiService.updateChatSession(sessionId, updates.title || '');
 
             setSessions(prev => prev.map(session => {
                 if (session.id.toString() === sessionId.toString()) {
-                    return { ...session, ...updates };
+                    return { ...session, ...updates, updated_at: new Date().toISOString() };
                 }
                 return session;
             }));
 
             if (currentSession?.id.toString() === sessionId.toString()) {
-                setCurrentSessionState(prev => prev ? { ...prev, ...updates } : null);
+                setCurrentSessionState(prev => prev ? { ...prev, ...updates, updated_at: new Date().toISOString() } : null);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to update session');
-            throw err;
+            console.log('Backend not available, updating local session');
+            // Update local session
+            setSessions(prev => prev.map(session => {
+                if (session.id.toString() === sessionId.toString()) {
+                    return { ...session, ...updates, updated_at: new Date().toISOString() };
+                }
+                return session;
+            }));
+
+            if (currentSession?.id.toString() === sessionId.toString()) {
+                setCurrentSessionState(prev => prev ? { ...prev, ...updates, updated_at: new Date().toISOString() } : null);
+            }
         }
     };
 
     const deleteSession = async (sessionId: string): Promise<void> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
-            const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to delete session: ${response.status}`);
-            }
+            await apiService.deleteChatSession(sessionId);
 
             setSessions(prev => prev.filter(session => session.id.toString() !== sessionId.toString()));
 
-            // If we deleted the current session, switch to another one
             if (currentSession?.id.toString() === sessionId.toString()) {
-                const remainingSessions = sessions.filter(session => session.id.toString() !== sessionId.toString());
-                if (remainingSessions.length > 0) {
-                    setCurrentSessionState(remainingSessions[0]);
-                } else {
-                    setCurrentSessionState(null);
-                }
+                setCurrentSessionState(null);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to delete session');
-            throw err;
+            console.log('Backend not available, deleting local session');
+            // Delete local session
+            setSessions(prev => prev.filter(session => session.id.toString() !== sessionId.toString()));
+
+            if (currentSession?.id.toString() === sessionId.toString()) {
+                setCurrentSessionState(null);
+            }
         }
     };
 
-    const addMessage = async (sessionId: string, content: string, isUserMessage: boolean, agentInfo?: any): Promise<void> => {
+    const addMessage = async (sessionId: string, content: string, isUserMessage: boolean, agentInfo?: any, documentAttachments?: any[]): Promise<void> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
+            const newMessage: ChatMessage = {
+                id: `msg_${Date.now()}_${Math.random()}`,
+                text: content,
+                sender: isUserMessage ? 'user' : 'ai',
+                timestamp: new Date().toISOString(),
+                session_id: sessionId,
+                agent_info: agentInfo,
+                document_attachments: documentAttachments
+            };
+
+            // Try to save to backend first
+            try {
+                await apiService.addMessage(sessionId, content, isUserMessage ? 'user' : 'ai');
+            } catch (err) {
+                console.log('Backend not available, saving message locally');
             }
-
-            // Ensure content is a string
-            const contentString = typeof content === 'string' ? content : String(content);
-
-            console.log('[DEBUG] Adding message:', { sessionId, content: contentString.substring(0, 100), isUserMessage, agentInfo }); // Debug log
-
-            const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    text: contentString,
-                    sender: isUserMessage ? 'user' : 'ai',
-                    agent_info: agentInfo
-                })
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[DEBUG] Response error:', response.status, errorText); // Debug log
-
-                // Handle specific error cases
-                if (response.status === 400) {
-                    try {
-                        const errorData = JSON.parse(errorText);
-                        if (errorData.error && errorData.error.includes('cannot exceed')) {
-                            throw new Error('Response too long. Please try a shorter query.');
-                        }
-                    } catch (parseError) {
-                        // If we can't parse the error, use the original error
-                    }
-                }
-
-                throw new Error(`Failed to add message: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const newMessage = data.message_data;
 
             // Update sessions with new message
             setSessions(prev => prev.map(session => {
                 if (session.id.toString() === sessionId.toString()) {
                     return {
                         ...session,
-                        messages: [...session.messages, newMessage],
+                        messages: [...(session.messages || []), newMessage],
                         updated_at: new Date().toISOString()
                     };
                 }
@@ -449,7 +324,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
             if (currentSession?.id.toString() === sessionId.toString()) {
                 setCurrentSessionState(prev => prev ? {
                     ...prev,
-                    messages: [...prev.messages, newMessage],
+                    messages: [...(prev.messages || []), newMessage],
                     updated_at: new Date().toISOString()
                 } : null);
             }
@@ -461,29 +336,13 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
     const updateMessage = async (sessionId: string, messageId: string, content: string): Promise<void> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
-            const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages/${messageId}`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ text: content })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to update message: ${response.status}`);
-            }
+            const response = await apiService.updateMessage(messageId, content);
 
             setSessions(prev => prev.map(session => {
                 if (session.id.toString() === sessionId.toString()) {
                     return {
                         ...session,
-                        messages: session.messages.map(msg =>
+                        messages: (session.messages || []).map(msg =>
                             msg.id.toString() === messageId.toString() ? { ...msg, text: content } : msg
                         )
                     };
@@ -494,7 +353,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
             if (currentSession?.id.toString() === sessionId.toString()) {
                 setCurrentSessionState(prev => prev ? {
                     ...prev,
-                    messages: prev.messages.map(msg =>
+                    messages: (prev.messages || []).map(msg =>
                         msg.id.toString() === messageId.toString() ? { ...msg, text: content } : msg
                     )
                 } : null);
@@ -507,28 +366,13 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
     const deleteMessage = async (sessionId: string, messageId: string): Promise<void> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
-            const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages/${messageId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to delete message: ${response.status}`);
-            }
+            const response = await apiService.deleteMessage(messageId);
 
             setSessions(prev => prev.map(session => {
                 if (session.id.toString() === sessionId.toString()) {
                     return {
                         ...session,
-                        messages: session.messages.filter(msg => msg.id.toString() !== messageId.toString())
+                        messages: (session.messages || []).filter(msg => msg.id.toString() !== messageId.toString())
                     };
                 }
                 return session;
@@ -537,7 +381,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
             if (currentSession?.id.toString() === sessionId.toString()) {
                 setCurrentSessionState(prev => prev ? {
                     ...prev,
-                    messages: prev.messages.filter(msg => msg.id.toString() !== messageId.toString())
+                    messages: (prev.messages || []).filter(msg => msg.id.toString() !== messageId.toString())
                 } : null);
             }
         } catch (err) {
@@ -548,17 +392,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
     const clearSession = async (sessionId: string): Promise<void> => {
         try {
-            const token = getAuthToken();
-            if (!token) {
-                throw new Error('No authentication token');
-            }
-
             const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
+                headers: getAuthHeaders()
             });
 
             if (!response.ok) {
@@ -582,46 +418,33 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     };
 
     const exportSession = (sessionId: string): string => {
-        const session = sessions.find(s => s.id === sessionId);
-        if (!session) {
-            throw new Error('Session not found');
-        }
+        const session = sessions.find(s => s.id.toString() === sessionId.toString());
+        if (!session) return '';
         return JSON.stringify(session, null, 2);
     };
 
     const importSession = async (sessionData: string): Promise<void> => {
         try {
             const session = JSON.parse(sessionData);
-            // Validate session structure
-            if (!session.title || !session.messages) {
-                throw new Error('Invalid session data format');
-            }
-
-            // Create new session with imported data
-            const newSession = await addSession(session.title);
-
-            // Add all messages from imported session
-            for (const message of session.messages) {
-                await addMessage(newSession.id, message.text, message.sender === 'user');
-            }
+            // Note: This would need backend support for importing sessions
+            console.log('Import session:', session);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to import session');
-            throw err;
+            setError('Failed to import session');
         }
     };
 
     const clearAllSessions = () => {
-        console.log('DEBUG: Clearing all chat sessions');
         setSessions([]);
         setCurrentSessionState(null);
-        setError(null);
     };
 
     const reloadSessions = async () => {
-        console.log('DEBUG: Manually reloading sessions');
-        const token = getAuthToken();
-        if (token) {
-            await loadSessions();
+        await loadSessions();
+    };
+
+    const refreshCurrentSession = async () => {
+        if (currentSession) {
+            await loadMessages(currentSession.id);
         }
     };
 

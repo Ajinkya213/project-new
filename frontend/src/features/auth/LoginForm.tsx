@@ -10,7 +10,7 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export function LoginForm() {
   const { login, isLoading, error, clearError } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -20,13 +20,13 @@ export function LoginForm() {
     setFormError(null);
     clearError();
 
-    if (!username.trim() || !password.trim()) {
+    if (!email.trim() || !password.trim()) {
       setFormError('Please fill in all fields');
       return;
     }
 
     try {
-      await login(username.trim(), password);
+      await login(email.trim(), password);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Login failed');
     }
@@ -48,14 +48,14 @@ export function LoginForm() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="username">Username or Email</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
-              id="username"
-              type="text"
-              placeholder="Enter your username or email"
-              value={username}
+              id="email"
+              type="email"
+              placeholder="Enter your email"
+              value={email}
               onChange={(e) => {
-                setUsername(e.target.value);
+                setEmail(e.target.value);
                 handleInputChange();
               }}
               disabled={isLoading}

@@ -8,7 +8,7 @@ import { Sidebar } from '../../components/userboard/Sidebar';
 import { MainContent } from '../../components/userboard/MainContent';
 
 export default function Userboard() {
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const { isAuthenticated, loading: isLoading, user, logout } = useAuth();
   const { currentSession, sessions, addSession, setCurrentSession } = useChat();
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,20 +71,25 @@ export default function Userboard() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <UserboardNavbar
-        user={user}
-        onLogout={handleLogout}
-      />
-      <div className="flex flex-1 pt-16 overflow-hidden">
+      <UserboardNavbar />
+      <div className="flex flex-1 pt-16 overflow-hidden relative">
         <Sidebar
           sessions={sessions}
           currentSession={currentSession}
           onNewQuery={handleNewQuery}
           onSessionSelect={handleSessionSelect}
           onLogout={handleLogout}
-          user={user}
+          user={user ? {
+            id: user.uid,
+            username: user.name || user.email,
+            email: user.email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            is_active: true,
+            is_verified: true
+          } : null}
         />
-        <div className="flex-1 min-w-0 w-full">
+        <div className="flex-1 min-w-0 w-full relative">
           <MainContent
             currentSession={currentSession}
           />

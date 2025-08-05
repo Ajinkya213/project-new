@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from "@/lib/utils";
+import { DocumentUpload } from './DocumentUpload';
 
 interface UploadedFile {
   id: string;
@@ -104,6 +105,16 @@ export function FileLibraryTab({ uploadedFiles, onFileUpload, onFileDelete }: Fi
 
   return (
     <div className="flex flex-col h-full p-4">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold mb-2">Document Upload</h3>
+        <DocumentUpload
+          onUploadSuccess={() => {
+            // Refresh the file list or show success message
+            console.log('Document uploaded successfully!');
+          }}
+        />
+      </div>
+
       <Card
         className={cn(
           "border-2 border-dashed bg-muted p-6 text-center transition-colors",

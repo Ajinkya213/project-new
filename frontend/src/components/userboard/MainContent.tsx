@@ -2,6 +2,7 @@
 import React from "react";
 import { ChatTab } from "./ChatTab";
 import { FileLibraryTab } from "./FileLibraryTab";
+import { DocumentAgentTab } from "./DocumentAgentTab";
 import { useChat } from "../../contexts/ChatContext";
 import type { ChatMessage } from "../../contexts/ChatContext";
 import { truncateResponse, getResponseInfo } from "../../utils/responseTruncator";
@@ -20,6 +21,18 @@ interface UploadedFile {
   progress?: number; // 0-100
 }
 
+interface UploadedDocument {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  uploadDate: string;
+  status: 'uploading' | 'processing' | 'completed' | 'failed';
+  progress?: number;
+  pages?: number;
+  error?: string;
+}
+
 export function MainContent({
   currentSession
 }: MainContentProps) {
@@ -29,15 +42,100 @@ export function MainContent({
   const activeSession = session;
   const activeMessages = activeSession?.messages || [];
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
+  const [uploadedDocuments, setUploadedDocuments] = React.useState<UploadedDocument[]>([]);
   const [isSendingMessage, setIsSendingMessage] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"chat" | "files">("chat");
+  const [activeTab, setActiveTab] = React.useState<"chat" | "files" | "documents">("chat");
 
-  // Enhanced AI response using automatic agent selection
+  // Check if documents are available for context
+  const hasAvailableDocuments = uploadedDocuments.length > 0 && uploadedDocuments.some(doc => doc.status === 'completed');
+
+  // Enhanced AI response using automatic agent selection with document context
   const generateAIResponse = async (userMessage: string): Promise<{ response: string; agentInfo?: any }> => {
     try {
       const { AgentService } = await import('../../lib/agentService');
 
-      // Use automatic agent selection
+      // Check if this is a document query
+      if (userMessage.startsWith('[Document Query]')) {
+        // Use document agent for document-specific queries
+        const { DocumentAgentService } = await import('../../lib/documentAgentService');
+        const documentQuery = userMessage.replace('[Document Query] ', '');
+
+        const response = await DocumentAgentService.queryDocumentAgent(documentQuery);
+
+        if (response.success) {
+          return {
+            response: response.response || 'I processed your document query but got an empty response.',
+            agentInfo: {
+              selectedAgent: 'document',
+              confidence: 1.0,
+              documentsUsed: response.document_matches?.map((doc: any) => doc.filename) || [],
+              sources: response.sources || [],
+              searchResults: response.documents_found || 0
+            }
+          };
+        } else {
+          return {
+            response: `Document query failed: ${response.error}. Please try again.`,
+            agentInfo: { selectedAgent: 'document', confidence: 0.0 }
+          };
+        }
+      }
+
+      // Check if this is an image processing query
+      if (userMessage.startsWith('[Image Processing]')) {
+        // Use multimodal agent for image processing
+        const imageQuery = userMessage.replace('[Image Processing] ', '');
+
+        const response = await AgentService.queryAgent({
+          query: imageQuery,
+          agent_type: 'multimodal'
+        });
+
+        if (response.success) {
+          return {
+            response: response.response || 'I processed your image but got an empty response.',
+            agentInfo: {
+              selectedAgent: 'multimodal',
+              confidence: 1.0,
+              sources: ['image_processing'],
+              searchResults: 1
+            }
+          };
+        } else {
+          return {
+            response: `Image processing failed: ${response.error}. Please try again.`,
+            agentInfo: { selectedAgent: 'multimodal', confidence: 0.0 }
+          };
+        }
+      }
+
+      // Check if we have uploaded documents and should use document context
+      const hasUploadedDocuments = uploadedDocuments.length > 0 && uploadedDocuments.some(doc => doc.status === 'completed');
+
+      if (hasUploadedDocuments) {
+        // Use document agent for queries when documents are available
+        console.log('Documents available, using document agent for context');
+        const { DocumentAgentService } = await import('../../lib/documentAgentService');
+
+        const response = await DocumentAgentService.queryDocumentAgent(userMessage);
+
+        if (response.success) {
+          return {
+            response: response.response || 'I processed your query with document context but got an empty response.',
+            agentInfo: {
+              selectedAgent: 'document',
+              confidence: 1.0,
+              documentsUsed: response.document_matches?.map((doc: any) => doc.filename) || [],
+              sources: response.sources || ['uploaded_documents'],
+              searchResults: response.documents_found || 0
+            }
+          };
+        } else {
+          console.log('Document agent failed, falling back to regular agent');
+        }
+      }
+
+      // Use automatic agent selection for regular queries (fallback or no documents)
       const response = await AgentService.autoQueryAgent({
         query: userMessage
       });
@@ -51,7 +149,11 @@ export function MainContent({
 
         return {
           response: response.response || 'I processed your message but got an empty response.',
-          agentInfo: response.agent_selection
+          agentInfo: {
+            ...response.agent_selection,
+            sources: (response as any).sources || ['general_knowledge'],
+            searchResults: (response as any).search_results_count || 0
+          }
         };
       } else {
         console.error('Agent query failed:', response.error);
@@ -77,9 +179,9 @@ export function MainContent({
       }
     } catch (error) {
       console.error('Failed to query agent:', error);
-      // Fallback to simple response
+      // Fallback to simple response when backend is not available
       return {
-        response: `I understand you said: "${userMessage}". This is a fallback response while the agent service is unavailable.`,
+        response: `I understand you said: "${userMessage}". This is a fallback response while the agent service is unavailable. You can still chat and your messages will be saved locally.`,
         agentInfo: { selectedAgent: 'lightweight', confidence: 0.0 }
       };
     }
@@ -94,7 +196,11 @@ export function MainContent({
         const newSession = await addSession();
         if (newSession) {
           // Add user message to new session
-          await addMessage(newSession.id, messageText, true);
+          await addMessage(newSession.id, messageText, true, undefined, uploadedDocuments.length > 0 ? uploadedDocuments.map(doc => ({
+            filename: doc.name,
+            pages: doc.pages,
+            status: doc.status
+          })) : undefined);
 
           // Generate AI response using agent service
           setTimeout(async () => {
@@ -126,7 +232,11 @@ export function MainContent({
     setIsSendingMessage(true);
     try {
       // Add user message
-      await addMessage(activeSession.id, messageText, true);
+      await addMessage(activeSession.id, messageText, true, undefined, uploadedDocuments.length > 0 ? uploadedDocuments.map(doc => ({
+        filename: doc.name,
+        pages: doc.pages,
+        status: doc.status
+      })) : undefined);
 
       // Generate AI response using agent service
       setTimeout(async () => {
@@ -221,6 +331,15 @@ export function MainContent({
               Chat
             </button>
             <button
+              onClick={() => setActiveTab("documents")}
+              className={`px-4 py-2 text-sm font-medium ${activeTab === "documents"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
+            >
+              Document Agent
+            </button>
+            <button
               onClick={() => setActiveTab("files")}
               className={`px-4 py-2 text-sm font-medium ${activeTab === "files"
                 ? "border-b-2 border-primary text-primary"
@@ -229,17 +348,26 @@ export function MainContent({
             >
               Files
             </button>
+
           </div>
         </div>
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden w-full">
+      <div className="flex-1 overflow-y-auto w-full">
         {activeTab === "chat" ? (
           <ChatTab
             currentChatMessages={activeMessages}
             onSendMessage={handleSendMessage}
             isSending={isSendingMessage}
+            uploadedDocuments={uploadedDocuments}
+          />
+        ) : activeTab === "documents" ? (
+          <DocumentAgentTab
+            onSendMessage={handleSendMessage}
+            onSwitchToChat={() => setActiveTab("chat")}
+            uploadedDocuments={uploadedDocuments}
+            setUploadedDocuments={setUploadedDocuments}
           />
         ) : (
           <FileLibraryTab

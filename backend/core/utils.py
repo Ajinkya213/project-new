@@ -24,11 +24,35 @@ class PdfConverter:
         '''
         pdf_name = os.path.basename(file_path)
         try:
-            # Try with poppler path, fallback to default
-            try:
-                images = convert_from_path(file_path, poppler_path=r"C:\Program Files\poppler-24.08.0\Library\bin")
-            except:
-                images = convert_from_path(file_path)
+            # Try multiple poppler paths
+            poppler_paths = [
+                r"C:\Program Files\poppler-24.08.0\Library\bin",
+                r"C:\Program Files\poppler\Library\bin",
+                r"C:\poppler\bin",
+                r"C:\Program Files (x86)\poppler\bin",
+                None  # Try without path
+            ]
+            
+            images = None
+            for poppler_path in poppler_paths:
+                try:
+                    if poppler_path:
+                        print(f"[INFO] Trying Poppler path: {poppler_path}")
+                        images = convert_from_path(file_path, poppler_path=poppler_path)
+                        print(f"[INFO] Successfully converted with Poppler path: {poppler_path}")
+                        break
+                    else:
+                        print("[INFO] Trying default Poppler path")
+                        images = convert_from_path(file_path)
+                        print("[INFO] Successfully converted with default path")
+                        break
+                except Exception as e:
+                    print(f"[WARNING] Failed with path {poppler_path}: {e}")
+                    continue
+            
+            if images is None:
+                raise Exception("All Poppler paths failed")
+                
         except Exception as e:
             print(f"[ERROR] Failed to convert {pdf_name}: {e}")
             return []

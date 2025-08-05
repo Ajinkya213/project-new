@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useLocation } from "react-router-dom";
 import { ChevronRightIcon, PlusIcon, GearIcon, ExitIcon, TrashIcon, PersonIcon } from "@radix-ui/react-icons";
+import { User, Settings, LogOut } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -10,10 +11,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { useChat, type ChatSession } from "../../contexts/ChatContext";
 import { ThemeToggle } from "../ThemeToggle";
+import { Link } from "react-router-dom";
 
 interface User {
   id: string;
@@ -82,7 +86,10 @@ export function Sidebar({ sessions, currentSession, onNewQuery, onSessionSelect,
   };
 
   // Get initials for circular avatar
-  const getInitials = (text: string) => {
+  const getInitials = (text: string | undefined | null) => {
+    if (!text || typeof text !== 'string') {
+      return 'U';
+    }
     return text
       .split(' ')
       .map(word => word.charAt(0))
@@ -269,6 +276,109 @@ export function Sidebar({ sessions, currentSession, onNewQuery, onSessionSelect,
               )}
             </div>
           </div>
+        </div>
+
+        {/* User Profile Section */}
+        <div className="mt-auto pt-4 border-t border-border/50 space-y-2">
+          {isOpen ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-auto p-3 hover:bg-accent/50"
+                >
+                  <div className="flex items-center space-x-3 w-full">
+                    <div className="relative">
+                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-semibold">
+                        {getInitials(user?.username || 'User')}
+                      </div>
+                      <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background"></div>
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-medium text-foreground truncate">{user?.username || 'User'}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user?.email || 'user@example.com'}</p>
+                    </div>
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.username || 'User'}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user?.email || 'user@example.com'}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Account Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-10 h-10 rounded-xl hover:bg-accent/50"
+                  title={user?.username || 'User'}
+                >
+                  <div className="relative">
+                    <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-semibold">
+                      {getInitials(user?.username || 'User')}
+                    </div>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-background"></div>
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.username || 'User'}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user?.email || 'user@example.com'}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Account Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Dedicated Logout Button */}
+          <Button
+            onClick={onLogout}
+            variant="ghost"
+            className={cn(
+              "w-full transition-all duration-300 text-destructive hover:text-destructive hover:bg-destructive/10",
+              isOpen
+                ? "h-10 justify-start gap-3 rounded-lg"
+                : "h-10 w-10 p-0 rounded-xl"
+            )}
+            title={isOpen ? "Sign Out" : "Sign Out"}
+          >
+            <LogOut className="h-4 w-4" />
+            {isOpen && "Sign Out"}
+          </Button>
         </div>
       </div>
     </Collapsible>

@@ -1,1 +1,1 @@
-export { default as AppRoutes } from './Approutes' 
+export { default as AppRoutes } from './Approutes.tsx' 

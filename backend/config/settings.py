@@ -26,7 +26,7 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = 2592000  # 30 days
     
     # CORS settings
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173,http://localhost:4173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:4173').split(',')
+    CORS_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173']
     
     # File upload settings
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
@@ -45,7 +45,7 @@ class Config:
 
 class DevelopmentConfig(Config):
     """Development configuration"""
-    DEBUG = True
+    DEBUG = False  # Disable debug mode to prevent server restarts
     SQLALCHEMY_DATABASE_URI = 'sqlite:///chat_app.db'
 
 class ProductionConfig(Config):

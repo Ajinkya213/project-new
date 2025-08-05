@@ -1,0 +1,20 @@
+{
+  "test.pdf_1": {
+    "doc_id": 1,
+    "page_number": 1,
+    "filename": "test.pdf",
+    "image_path": "",
+    "content": "Document: test.pdf, Page: 1 - Content not extracted",
+    "content_length": 51,
+    "extracted_at": "2025-08-04 12:03:46.063535"
+  },
+  "MHHSRP3FE166A7-D953-4E27072025000943522.pdf_1": {
+    "doc_id": 1,
+    "page_number": 1,
+    "filename": "MHHSRP3FE166A7-D953-4E27072025000943522.pdf",
+    "image_path": "..\\data\\pdf_images\\doc_1_page_1_MHHSRP3FE166A7-D953-4E27072025000943522.png",
+    "content": "Document: MHHSRP3FE166A7-D953-4E27072025000943522.pdf, Page: 1 - Content not extracted",
+    "content_length": 86,
+    "extracted_at": "2025-08-04 12:03:46.053667"
+  }
+}

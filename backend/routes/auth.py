@@ -1,262 +1,193 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from models.database import db
-from models.user import User
-from utils.auth_utils import generate_tokens, get_current_user, validate_user_input, sanitize_input
-from utils.validators import UserValidator
-import uuid
+from services.firebase_auth_service import firebase_auth_service, require_auth
+from datetime import datetime
 
-# Create Blueprint
-auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+auth_bp = Blueprint('auth', __name__)
 
-@auth_bp.route('/register', methods=['POST'])
-def register():
-    """Register a new user"""
+@auth_bp.route('/signup', methods=['POST'])
+def signup():
+    """Sign up new user with Firebase Auth"""
     try:
         data = request.get_json()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        name = data.get('name', '').strip()
         
-        if not data:
-            return jsonify({'error': 'Request body is required'}), 400
+        if not email or not password:
+            return jsonify({
+                'success': False,
+                'error': 'Email and password are required'
+            }), 400
         
-        # Validate required fields
-        required_fields = ['username', 'email', 'password']
-        validation_errors = validate_user_input(data, required_fields)
+        # Create user in Firebase Auth
+        user = firebase_auth_service.create_user(email, password, name)
         
-        if validation_errors:
-            return jsonify({'error': 'Validation failed', 'details': validation_errors}), 400
-        
-        # Sanitize inputs
-        username = sanitize_input(data['username'])
-        email = sanitize_input(data['email'])
-        password = data['password']
-        
-        # Validate username
-        is_valid_username, username_error = UserValidator.validate_username(username)
-        if not is_valid_username:
-            return jsonify({'error': username_error}), 400
-        
-        # Validate email
-        is_valid_email, email_error = UserValidator.validate_email(email)
-        if not is_valid_email:
-            return jsonify({'error': email_error}), 400
-        
-        # Validate password
-        is_valid_password, password_error = UserValidator.validate_password(password)
-        if not is_valid_password:
-            return jsonify({'error': password_error}), 400
-        
-        # Check if username already exists
-        if User.find_by_username(username):
-            return jsonify({'error': 'Username already exists'}), 409
-        
-        # Check if email already exists
-        if User.find_by_email(email):
-            return jsonify({'error': 'Email already exists'}), 409
-        
-        # Create new user
-        user = User(
-            username=username,
-            email=email,
-            password=password
-        )
-        
-        db.session.add(user)
-        db.session.commit()
-        
-        # Generate tokens
-        tokens = generate_tokens(user.id)
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to create user. Email might already be in use.'
+            }), 400
         
         return jsonify({
-            'message': 'User registered successfully',
-            'user': user.to_dict(),
-            'tokens': tokens
+            'success': True,
+            'message': 'User created successfully',
+            'user': {
+                'uid': user['uid'],
+                'email': user['email'],
+                'name': user['name'],
+                'email_verified': user['email_verified']
+            }
         }), 201
         
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Registration failed', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': f'Signup failed: {str(e)}'
+        }), 500
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """Login user and return JWT tokens"""
+    """Login endpoint - returns user info for Firebase Auth"""
     try:
         data = request.get_json()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
         
-        if not data:
-            return jsonify({'error': 'Request body is required'}), 400
+        if not email or not password:
+            return jsonify({
+                'success': False,
+                'error': 'Email and password are required'
+            }), 400
         
-        # Validate required fields
-        required_fields = ['username', 'password']
-        validation_errors = validate_user_input(data, required_fields)
-        
-        if validation_errors:
-            return jsonify({'error': 'Validation failed', 'details': validation_errors}), 400
-        
-        username = sanitize_input(data['username'])
-        password = data['password']
-        
-        # Find user by username or email
-        user = User.find_by_username(username)
-        if not user:
-            user = User.find_by_email(username)
-        
-        if not user:
-            return jsonify({'error': 'Invalid username or password'}), 401
-        
-        # Check password
-        if not user.check_password(password):
-            return jsonify({'error': 'Invalid username or password'}), 401
-        
-        # Check if user is active
-        if not user.is_active:
-            return jsonify({'error': 'Account is deactivated'}), 403
-        
-        # Generate tokens
-        tokens = generate_tokens(user.id)
-        
+        # Note: Firebase Auth handles login on the frontend
+        # This endpoint can be used for additional server-side validation if needed
         return jsonify({
-            'message': 'Login successful',
-            'user': user.to_dict(),
-            'tokens': tokens
+            'success': True,
+            'message': 'Login successful. Use Firebase Auth on frontend.',
+            'auth_method': 'firebase'
         }), 200
         
     except Exception as e:
-        return jsonify({'error': 'Login failed', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': f'Login failed: {str(e)}'
+        }), 500
 
-@auth_bp.route('/refresh', methods=['POST'])
-@jwt_required(refresh=True)
-def refresh():
-    """Refresh access token"""
+@auth_bp.route('/verify-token', methods=['POST'])
+def verify_token():
+    """Verify Firebase ID token"""
     try:
-        current_user_id = get_jwt_identity()
-        user = User.find_by_id(current_user_id)
+        data = request.get_json()
+        id_token = data.get('idToken')
         
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+        if not id_token:
+            return jsonify({
+                'success': False,
+                'error': 'ID token is required'
+            }), 400
         
-        if not user.is_active:
-            return jsonify({'error': 'Account is deactivated'}), 403
+        # Verify token with Firebase
+        user_info = firebase_auth_service.verify_token(id_token)
         
-        # Generate new tokens
-        tokens = generate_tokens(user.id)
+        if not user_info:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid or expired token'
+            }), 401
         
         return jsonify({
-            'message': 'Token refreshed successfully',
-            'tokens': tokens
+            'success': True,
+            'user': user_info
         }), 200
         
     except Exception as e:
-        return jsonify({'error': 'Token refresh failed', 'details': str(e)}), 500
-
-@auth_bp.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
-    """Logout user (client should discard tokens)"""
-    try:
-        # In a real application, you might want to blacklist the token
-        # For now, we'll just return a success message
-        return jsonify({'message': 'Logout successful'}), 200
-        
-    except Exception as e:
-        return jsonify({'error': 'Logout failed', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': f'Token verification failed: {str(e)}'
+        }), 500
 
 @auth_bp.route('/profile', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_profile():
-    """Get current user profile"""
+    """Get user profile"""
     try:
-        user = get_current_user()
+        user_info = request.user
         
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+        # Get additional user data from Firestore if needed
+        user_data = firebase_auth_service.get_user(user_info['uid'])
         
         return jsonify({
-            'user': user.to_dict_with_sessions()
+            'success': True,
+            'user': user_data or user_info
         }), 200
         
     except Exception as e:
-        return jsonify({'error': 'Failed to get profile', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': f'Failed to get profile: {str(e)}'
+        }), 500
 
 @auth_bp.route('/profile', methods=['PUT'])
-@jwt_required()
+@require_auth
 def update_profile():
     """Update user profile"""
     try:
-        user = get_current_user()
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
+        user_info = request.user
         data = request.get_json()
         
-        if not data:
-            return jsonify({'error': 'Request body is required'}), 400
+        update_data = {}
+        if 'name' in data:
+            update_data['display_name'] = data['name']
         
-        # Update username if provided
-        if 'username' in data:
-            new_username = sanitize_input(data['username'])
-            is_valid, error_msg = UserValidator.validate_username(new_username)
-            
-            if not is_valid:
-                return jsonify({'error': error_msg}), 400
-            
-            # Check if username is already taken by another user
-            existing_user = User.find_by_username(new_username)
-            if existing_user and existing_user.id != user.id:
-                return jsonify({'error': 'Username already exists'}), 409
-            
-            user.username = new_username
+        if not update_data:
+            return jsonify({
+                'success': False,
+                'error': 'No fields to update'
+            }), 400
         
-        # Update email if provided
-        if 'email' in data:
-            new_email = sanitize_input(data['email'])
-            is_valid, error_msg = UserValidator.validate_email(new_email)
-            
-            if not is_valid:
-                return jsonify({'error': error_msg}), 400
-            
-            # Check if email is already taken by another user
-            existing_user = User.find_by_email(new_email)
-            if existing_user and existing_user.id != user.id:
-                return jsonify({'error': 'Email already exists'}), 409
-            
-            user.email = new_email
+        # Update user in Firebase Auth
+        updated_user = firebase_auth_service.update_user(user_info['uid'], **update_data)
         
-        # Update password if provided
-        if 'password' in data:
-            new_password = data['password']
-            is_valid, error_msg = UserValidator.validate_password(new_password)
-            
-            if not is_valid:
-                return jsonify({'error': error_msg}), 400
-            
-            user.set_password(new_password)
-        
-        db.session.commit()
+        if not updated_user:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to update profile'
+            }), 500
         
         return jsonify({
-            'message': 'Profile updated successfully',
-            'user': user.to_dict()
+            'success': True,
+            'user': updated_user
         }), 200
         
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Profile update failed', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': f'Failed to update profile: {str(e)}'
+        }), 500
 
-@auth_bp.route('/verify', methods=['GET'])
-@jwt_required()
-def verify_token():
-    """Verify if the current token is valid"""
+@auth_bp.route('/delete-account', methods=['DELETE'])
+@require_auth
+def delete_account():
+    """Delete user account"""
     try:
-        user = get_current_user()
+        user_info = request.user
         
-        if not user:
-            return jsonify({'error': 'Invalid token'}), 401
+        # Delete user from Firebase Auth
+        success = firebase_auth_service.delete_user(user_info['uid'])
+        
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to delete account'
+            }), 500
         
         return jsonify({
-            'message': 'Token is valid',
-            'user': user.to_dict()
+            'success': True,
+            'message': 'Account deleted successfully'
         }), 200
         
     except Exception as e:
-        return jsonify({'error': 'Token verification failed', 'details': str(e)}), 500 
+        return jsonify({
+            'success': False,
+            'error': f'Failed to delete account: {str(e)}'
+        }), 500 

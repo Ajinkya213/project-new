@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export function SignupForm() {
-  const { register, isLoading, error, clearError } = useAuth();
+  const { signup, loading: isLoading, error, clearError } = useAuth();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,7 +49,7 @@ export function SignupForm() {
     }
 
     try {
-      await register(username.trim(), email.trim(), password);
+      await signup(email.trim(), password, username.trim());
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Registration failed');
     }

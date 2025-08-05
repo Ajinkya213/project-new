@@ -25,8 +25,8 @@ def init_database(app):
     migrate.init_app(app, db)
     
     # Import models to register them with SQLAlchemy
-    from .user import User
     from .chat import ChatSession, Message
+    from .user import User
     
     # Create tables
     with app.app_context():
@@ -43,7 +43,12 @@ def close_db(e=None):
 
 def init_app(app):
     """Initialize database with app"""
-    init_database(app)
+    db.init_app(app)
+    migrate.init_app(app, db)
+    
+    # Import models to register them with SQLAlchemy
+    from .chat import ChatSession, Message
+    from .user import User
     
     # Register close_db function to be called when app context ends
     app.teardown_appcontext(close_db) 

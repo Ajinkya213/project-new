@@ -79,7 +79,9 @@ class AgentSelector:
                 "analyze", "extract", "summarize", "summary", "key points",
                 "main points", "important", "highlight", "insights", "findings",
                 "conclusion", "recommendation", "suggestion", "review",
-                "examine", "study", "understand", "comprehend", "interpret"
+                "examine", "study", "understand", "comprehend", "interpret",
+                "document", "pdf", "file", "content", "information", "data",
+                "retrieve", "find in", "search document", "look up", "reference"
             ],
             "patterns": [
                 r"analyze.*",
@@ -100,7 +102,15 @@ class AgentSelector:
                 r"study.*",
                 r"understand.*",
                 r"comprehend.*",
-                r"interpret.*"
+                r"interpret.*",
+                r"document.*",
+                r"pdf.*",
+                r"file.*",
+                r"content.*",
+                r"information.*",
+                r"retrieve.*",
+                r"find.*document",
+                r"search.*document"
             ]
         },
         "chat": {
@@ -171,15 +181,15 @@ class AgentSelector:
         if any(word in query_lower for word in ["document", "file", "pdf", "upload"]):
             # Document-related queries
             scores["multimodal"] += 3.0
-            scores["document"] += 2.0
+            scores["document"] += 3.0  # Increased weight for document agent
         
         if any(word in query_lower for word in ["research", "study", "investigate", "current", "latest"]):
             # Research-related queries
             scores["research"] += 3.0
         
-        if any(word in query_lower for word in ["analyze", "summarize", "extract", "insights"]):
+        if any(word in query_lower for word in ["analyze", "summarize", "extract", "insights", "review", "examine"]):
             # Analysis-related queries
-            scores["document"] += 3.0
+            scores["document"] += 4.0  # Higher weight for analysis tasks
         
         # Normalize scores
         max_score = max(scores.values())

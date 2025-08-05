@@ -1,8 +1,8 @@
 // src/App.tsx
 import { useRoutes } from "react-router-dom"
 import { AppRoutes } from "./routes"
-import { AuthProvider } from "./contexts/AuthContext"
 import { ChatProvider } from "./contexts/ChatContext"
+import { AuthProvider } from "./contexts/AuthContext"
 
 function App() {
   const routing = useRoutes(AppRoutes)
